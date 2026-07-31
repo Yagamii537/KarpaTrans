@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="360" viewBox="0 0 1200 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gradBluePurple" x1="70" y1="55" x2="315" y2="305" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00A6FF"/>
+      <stop offset="0.48" stop-color="#155EEF"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+    <linearGradient id="gradText" x1="420" y1="90" x2="1120" y2="260" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#063BCE"/>
+      <stop offset="0.55" stop-color="#0B2A9C"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#1E40AF" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="360" fill="white"/>
+
+  <!-- Icono abstracto X + POS -->
+  <g filter="url(#softShadow)">
+    <path d="M107 65C102 58 107 48 116 48H167C181 48 194 54 203 65L294 178C301 187 302 200 295 210L229 300C220 312 207 319 192 319H141C132 319 127 309 132 302L215 190L107 65Z" fill="url(#gradBluePurple)"/>
+    <path d="M301 57C311 45 326 48 336 48H386C395 48 400 59 394 66L160 302C151 312 138 319 123 319H75C65 319 60 307 67 299L301 57Z" fill="url(#gradBluePurple)" opacity="0.96"/>
+
+    <!-- Terminal POS integrado -->
+    <g transform="translate(80 198) rotate(-8)">
+      <rect x="0" y="0" width="120" height="90" rx="18" fill="#0B63E5"/>
+      <rect x="18" y="16" width="84" height="25" rx="8" fill="white" opacity="0.92"/>
+      <rect x="20" y="52" width="24" height="11" rx="5" fill="white" opacity="0.92"/>
+      <rect x="51" y="52" width="24" height="11" rx="5" fill="white" opacity="0.92"/>
+      <rect x="82" y="52" width="24" height="11" rx="5" fill="white" opacity="0.92"/>
+      <rect x="20" y="70" width="24" height="11" rx="5" fill="white" opacity="0.92"/>
+      <rect x="51" y="70" width="24" height="11" rx="5" fill="white" opacity="0.92"/>
+      <rect x="82" y="70" width="24" height="11" rx="5" fill="white" opacity="0.92"/>
+    </g>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="420" y="228"
+        font-family="Poppins, Montserrat, Inter, Arial, sans-serif"
+        font-size="132"
+        font-weight="800"
+        letter-spacing="-4"
+        fill="url(#gradText)">XeratPos</text>
+</svg>

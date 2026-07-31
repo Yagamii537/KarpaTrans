@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="682" viewBox="0 0 2048 682" fill="none">
+  <defs>
+    <linearGradient id="gradX1" x1="185" y1="165" x2="562" y2="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#149EFF"/>
+      <stop offset="0.5" stop-color="#1D55F0"/>
+      <stop offset="1" stop-color="#7D3CFF"/>
+    </linearGradient>
+    <linearGradient id="gradX2" x1="505" y1="158" x2="219" y2="514" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7D3CFF"/>
+      <stop offset="0.48" stop-color="#4457F4"/>
+      <stop offset="1" stop-color="#0C82FF"/>
+    </linearGradient>
+    <linearGradient id="gradText" x1="655" y1="205" x2="1878" y2="488" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0C4BE4"/>
+      <stop offset="0.58" stop-color="#082AB0"/>
+      <stop offset="1" stop-color="#8B39FF"/>
+    </linearGradient>
+    <filter id="shadow" x="0" y="0" width="2048" height="682" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#1D4ED8" flood-opacity="0.10"/>
+    </filter>
+    <style>
+      .brand { font-family: Inter, Poppins, Montserrat, Arial, sans-serif; font-weight: 700; }
+    </style>
+  </defs>
+
+  <rect width="2048" height="682" rx="0" fill="white"/>
+
+  <g filter="url(#shadow)">
+    <!-- X icon -->
+    <line x1="215" y1="169" x2="534" y2="502" stroke="url(#gradX1)" stroke-width="96" stroke-linecap="round"/>
+    <line x1="531" y1="165" x2="215" y2="505" stroke="url(#gradX2)" stroke-width="96" stroke-linecap="round"/>
+
+    <!-- subtle overlap separators to match sample -->
+    <line x1="397" y1="255" x2="455" y2="313" stroke="white" stroke-width="10" stroke-linecap="round" opacity="0.95"/>
+    <line x1="388" y1="364" x2="447" y2="306" stroke="white" stroke-width="10" stroke-linecap="round" opacity="0.95"/>
+
+    <!-- POS terminal integrated on bottom-left -->
+    <g transform="translate(184 342) rotate(-8)">
+      <rect x="0" y="0" width="134" height="111" rx="22" fill="#0D6AE8"/>
+      <rect x="18" y="16" width="92" height="31" rx="9" fill="white" opacity="0.98"/>
+      <rect x="20" y="61" width="22" height="12" rx="6" fill="white" opacity="0.98"/>
+      <rect x="48" y="61" width="22" height="12" rx="6" fill="white" opacity="0.98"/>
+      <rect x="76" y="61" width="22" height="12" rx="6" fill="white" opacity="0.98"/>
+      <rect x="20" y="79" width="22" height="12" rx="6" fill="white" opacity="0.98"/>
+      <rect x="48" y="79" width="22" height="12" rx="6" fill="white" opacity="0.98"/>
+      <rect x="76" y="79" width="22" height="12" rx="6" fill="white" opacity="0.98"/>
+      <rect x="104" y="61" width="12" height="30" rx="6" fill="white" opacity="0.98"/>
+    </g>
+  </g>
+
+  <!-- wordmark -->
+  <text x="650" y="449" class="brand" font-size="190" letter-spacing="-6" fill="url(#gradText)">XeratPos</text>
+</svg>

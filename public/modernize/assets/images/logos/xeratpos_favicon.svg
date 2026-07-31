@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="90" y1="60" x2="420" y2="455" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00A6FF"/>
+      <stop offset="0.5" stop-color="#155EEF"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+    <filter id="s" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#1E40AF" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="white"/>
+  <g filter="url(#s)">
+    <path d="M117 92C106 78 116 58 134 58H206C229 58 250 68 264 86L397 253C409 268 410 289 398 305L306 428C291 448 268 459 243 459H174C156 459 146 438 157 424L275 266L117 92Z" fill="url(#g)"/>
+    <path d="M381 75C395 58 417 58 435 58H478C496 58 506 80 494 94L171 428C156 448 132 459 107 459H67C49 459 39 437 52 423L381 75Z" fill="url(#g)" opacity="0.96"/>
+    <g transform="translate(108 298) rotate(-8)">
+      <rect x="0" y="0" width="145" height="105" rx="24" fill="#0B63E5"/>
+      <rect x="24" y="18" width="95" height="30" rx="9" fill="white" opacity="0.92"/>
+      <rect x="25" y="61" width="28" height="13" rx="6" fill="white" opacity="0.92"/>
+      <rect x="60" y="61" width="28" height="13" rx="6" fill="white" opacity="0.92"/>
+      <rect x="95" y="61" width="28" height="13" rx="6" fill="white" opacity="0.92"/>
+      <rect x="25" y="82" width="28" height="13" rx="6" fill="white" opacity="0.92"/>
+      <rect x="60" y="82" width="28" height="13" rx="6" fill="white" opacity="0.92"/>
+      <rect x="95" y="82" width="28" height="13" rx="6" fill="white" opacity="0.92"/>
+    </g>
+  </g>
+</svg>
