@@ -68,8 +68,8 @@
 
                 <li class="sidebar-item">
 
-                    <a class="sidebar-link"
-                       href="javascript:void(0)">
+                    <a class="sidebar-link {{ request()->routeIs('clients.*') ? 'active' : '' }}"
+                    href="{{ route('clients.index') }}">
 
                         <span>
                             <i class="ti ti-users"></i>
@@ -84,9 +84,8 @@
                 </li>
 
                 <li class="sidebar-item">
-
-                    <a class="sidebar-link"
-                       href="javascript:void(0)">
+                    <a class="sidebar-link {{ request()->routeIs('drivers.*') ? 'active' : '' }}"
+                    href="{{ route('drivers.index') }}">
 
                         <span>
                             <i class="ti ti-steering-wheel"></i>
@@ -95,15 +94,12 @@
                         <span class="hide-menu">
                             Conductores
                         </span>
-
                     </a>
-
                 </li>
 
                 <li class="sidebar-item">
-
-                    <a class="sidebar-link"
-                       href="javascript:void(0)">
+                    <a class="sidebar-link {{ request()->routeIs('vehicles.*') ? 'active' : '' }}"
+                    href="{{ route('vehicles.index') }}">
 
                         <span>
                             <i class="ti ti-truck"></i>
@@ -112,9 +108,21 @@
                         <span class="hide-menu">
                             Vehículos
                         </span>
-
                     </a>
+                </li>
 
+                <li class="sidebar-item">
+                    <a class="sidebar-link {{ request()->routeIs('chassis.*') ? 'active' : '' }}"
+                    href="{{ route('chassis.index') }}">
+
+                        <span>
+                            <i class="ti ti-tool"></i>
+                        </span>
+
+                        <span class="hide-menu">
+                            Chasis
+                        </span>
+                    </a>
                 </li>
 
                 <li class="sidebar-item">
@@ -135,9 +143,8 @@
                 </li>
 
                 <li class="sidebar-item">
-
-                    <a class="sidebar-link"
-                       href="javascript:void(0)">
+                    <a class="sidebar-link {{ request()->routeIs('locations.*') ? 'active' : '' }}"
+                    href="{{ route('locations.index') }}">
 
                         <span>
                             <i class="ti ti-map-pin"></i>
@@ -146,15 +153,12 @@
                         <span class="hide-menu">
                             Ubicaciones
                         </span>
-
                     </a>
-
                 </li>
 
                 <li class="sidebar-item">
-
-                    <a class="sidebar-link"
-                       href="javascript:void(0)">
+                    <a class="sidebar-link {{ request()->routeIs('plants.*') ? 'active' : '' }}"
+                    href="{{ route('plants.index') }}">
 
                         <span>
                             <i class="ti ti-building-factory"></i>
@@ -163,27 +167,10 @@
                         <span class="hide-menu">
                             Plantas
                         </span>
-
                     </a>
-
                 </li>
 
-                <li class="sidebar-item">
 
-                    <a class="sidebar-link"
-                       href="javascript:void(0)">
-
-                        <span>
-                            <i class="ti ti-anchor"></i>
-                        </span>
-
-                        <span class="hide-menu">
-                            Puertos y depósitos
-                        </span>
-
-                    </a>
-
-                </li>
 
                 <li class="nav-small-cap">
                     <i class="ti ti-dots nav-small-cap-icon fs-4"></i>
