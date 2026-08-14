@@ -5,7 +5,6 @@ namespace App\Models;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Chassis extends Model
@@ -14,7 +13,6 @@ class Chassis extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'vehicle_id',
         'code',
         'plate',
         'chassis_type',
@@ -53,10 +51,7 @@ class Chassis extends Model
         ];
     }
 
-    public function vehicle(): BelongsTo
-    {
-        return $this->belongsTo(Vehicle::class);
-    }
+
 
     public function getDisplayNameAttribute(): string
     {

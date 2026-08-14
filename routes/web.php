@@ -9,6 +9,13 @@ use App\Http\Controllers\DriverController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\ChassisController;
 use App\Http\Controllers\LocationController;
+use App\Http\Controllers\SubclientController;
+use App\Http\Controllers\CargoTypeController;
+use App\Http\Controllers\DriverRestrictionController;
+use App\Http\Controllers\ContainerController;
+use App\Http\Controllers\WorkOrderController;
+use App\Http\Controllers\TripController;
+use App\Http\Controllers\TripTimeController;
 
 Route::middleware('guest')->group(function () {
     Route::get('/', function () {
@@ -32,6 +39,63 @@ Route::middleware('auth')->group(function () {
     Route::resource('vehicles', VehicleController::class);
     Route::resource('chassis', ChassisController::class);
     Route::resource('locations', LocationController::class);
+
+    Route::resource(
+        'subclients',
+        SubclientController::class
+    );
+
+    Route::resource(
+        'cargo-types',
+        CargoTypeController::class
+    );
+
+    Route::resource(
+        'driver-restrictions',
+        DriverRestrictionController::class
+    )->except(['show']);
+
+    Route::resource(
+        'containers',
+        ContainerController::class
+    );
+
+    Route::resource(
+        'work-orders',
+        WorkOrderController::class
+    );
+
+    Route::post(
+        '/work-orders/{workOrder}/generate-trips',
+        [TripController::class, 'generateFromWorkOrder']
+    )->name('work-orders.generate-trips');
+
+    Route::post(
+        '/trips/{trip}/assign',
+        [TripController::class, 'assign']
+    )->name('trips.assign');
+
+    Route::post(
+        '/trips/{trip}/status',
+        [TripController::class, 'updateStatus']
+    )->name('trips.status');
+
+    Route::resource(
+        'trips',
+        TripController::class
+    );
+
+    Route::post(
+        '/trips/{trip}/times',
+        [TripTimeController::class, 'store']
+    )->name('trips.times.store');
+
+    Route::delete(
+        '/trips/{trip}/times/{tripTime}',
+        [TripTimeController::class, 'destroy']
+    )->name('trips.times.destroy');
+
+
 
     Route::post('/logout', [LoginController::class, 'logout'])
         ->name('logout');

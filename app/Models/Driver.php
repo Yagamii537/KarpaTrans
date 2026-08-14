@@ -104,4 +104,9 @@ class Driver extends Model
             false
         );
     }
+
+    public function restrictions()
+    {
+        return $this->hasMany(DriverRestriction::class);
+    }
 }

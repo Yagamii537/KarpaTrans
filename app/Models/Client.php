@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\Plant;
+use App\Models\Subclient;
+use App\Models\CargoType;
 
 class Client extends Model
 {
@@ -51,5 +53,23 @@ class Client extends Model
     public function plants()
     {
         return $this->hasMany(Plant::class);
+    }
+
+    public function subclients()
+    {
+        return $this->hasMany(Subclient::class);
+    }
+
+    public function cargoTypes()
+    {
+        return $this->belongsToMany(
+            CargoType::class,
+            'client_cargo_types'
+        )->withTimestamps();
+    }
+
+    public function workOrders()
+    {
+        return $this->hasMany(WorkOrder::class);
     }
 }

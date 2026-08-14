@@ -4,20 +4,17 @@
 
         <div class="brand-logo d-flex align-items-center justify-content-between">
 
-            <a href="{{ route('dashboard') }}"
-               class="text-nowrap logo-img text-decoration-none">
+            <a href="{{ route('dashboard') }}" class="text-nowrap logo-img text-decoration-none">
 
                 <div class="d-flex flex-column">
 
-                    <span class="fw-bold text-primary"
-                          style="font-size: 20px; line-height: 1.2;">
+                    <span class="fw-bold text-primary" style="font-size: 20px; line-height: 1.2;">
 
                         KARPAN TRANST
 
                     </span>
 
-                    <small class="text-muted"
-                           style="font-size: 12px;">
+                    <small class="text-muted" style="font-size: 12px;">
 
                         Gestión Logística
 
@@ -47,7 +44,7 @@
                 <li class="sidebar-item">
 
                     <a class="sidebar-link {{ request()->routeIs('dashboard') ? 'active' : '' }}"
-                       href="{{ route('dashboard') }}">
+                        href="{{ route('dashboard') }}">
 
                         <span>
                             <i class="ti ti-layout-dashboard"></i>
@@ -69,10 +66,10 @@
                 <li class="sidebar-item">
 
                     <a class="sidebar-link {{ request()->routeIs('clients.*') ? 'active' : '' }}"
-                    href="{{ route('clients.index') }}">
+                        href="{{ route('clients.index') }}">
 
                         <span>
-                            <i class="ti ti-users"></i>
+                            <i class="ti ti-user"></i>
                         </span>
 
                         <span class="hide-menu">
@@ -83,9 +80,40 @@
 
                 </li>
 
+
+                <li class="sidebar-item">
+                    <a class="sidebar-link {{ request()->routeIs('subclients.*') ? 'active' : '' }}"
+                        href="{{ route('subclients.index') }}">
+
+                        <span>
+                            <i class="ti ti-users"></i>
+                        </span>
+
+                        <span class="hide-menu">
+                            Subclientes
+                        </span>
+
+                    </a>
+                </li>
+
+                <li class="sidebar-item">
+                    <a class="sidebar-link {{ request()->routeIs('cargo-types.*') ? 'active' : '' }}"
+                        href="{{ route('cargo-types.index') }}">
+
+                        <span>
+                            <i class="ti ti-package"></i>
+                        </span>
+
+                        <span class="hide-menu">
+                            Tipos de carga
+                        </span>
+
+                    </a>
+                </li>
+
                 <li class="sidebar-item">
                     <a class="sidebar-link {{ request()->routeIs('drivers.*') ? 'active' : '' }}"
-                    href="{{ route('drivers.index') }}">
+                        href="{{ route('drivers.index') }}">
 
                         <span>
                             <i class="ti ti-steering-wheel"></i>
@@ -98,8 +126,22 @@
                 </li>
 
                 <li class="sidebar-item">
+                    <a class="sidebar-link {{ request()->routeIs('driver-restrictions.*') ? 'active' : '' }}"
+                        href="{{ route('driver-restrictions.index') }}">
+
+                        <span>
+                            <i class="ti ti-alert-triangle"></i>
+                        </span>
+
+                        <span class="hide-menu">
+                            Restricciones
+                        </span>
+                    </a>
+                </li>
+
+                <li class="sidebar-item">
                     <a class="sidebar-link {{ request()->routeIs('vehicles.*') ? 'active' : '' }}"
-                    href="{{ route('vehicles.index') }}">
+                        href="{{ route('vehicles.index') }}">
 
                         <span>
                             <i class="ti ti-truck"></i>
@@ -113,7 +155,7 @@
 
                 <li class="sidebar-item">
                     <a class="sidebar-link {{ request()->routeIs('chassis.*') ? 'active' : '' }}"
-                    href="{{ route('chassis.index') }}">
+                        href="{{ route('chassis.index') }}">
 
                         <span>
                             <i class="ti ti-tool"></i>
@@ -127,8 +169,8 @@
 
                 <li class="sidebar-item">
 
-                    <a class="sidebar-link"
-                       href="javascript:void(0)">
+                    <a class="sidebar-link {{ request()->routeIs('containers.*') ? 'active' : '' }}"
+                        href="{{ route('containers.index') }}">
 
                         <span>
                             <i class="ti ti-box"></i>
@@ -144,7 +186,7 @@
 
                 <li class="sidebar-item">
                     <a class="sidebar-link {{ request()->routeIs('locations.*') ? 'active' : '' }}"
-                    href="{{ route('locations.index') }}">
+                        href="{{ route('locations.index') }}">
 
                         <span>
                             <i class="ti ti-map-pin"></i>
@@ -158,7 +200,7 @@
 
                 <li class="sidebar-item">
                     <a class="sidebar-link {{ request()->routeIs('plants.*') ? 'active' : '' }}"
-                    href="{{ route('plants.index') }}">
+                        href="{{ route('plants.index') }}">
 
                         <span>
                             <i class="ti ti-building-factory"></i>
@@ -179,11 +221,11 @@
 
                 <li class="sidebar-item">
 
-                    <a class="sidebar-link"
-                       href="javascript:void(0)">
+                    <a class="sidebar-link {{ request()->routeIs('work-orders.*') ? 'active' : '' }}"
+                        href="{{ route('work-orders.index') }}">
 
                         <span>
-                            <i class="ti ti-file-description"></i>
+                            <i class="ti ti-clipboard"></i>
                         </span>
 
                         <span class="hide-menu">
@@ -196,8 +238,8 @@
 
                 <li class="sidebar-item">
 
-                    <a class="sidebar-link"
-                       href="javascript:void(0)">
+                    <a class="sidebar-link {{ request()->routeIs('trips.*') ? 'active' : '' }}"
+                        href="{{ route('trips.index') }}">
 
                         <span>
                             <i class="ti ti-route"></i>
@@ -213,8 +255,7 @@
 
                 <li class="sidebar-item">
 
-                    <a class="sidebar-link"
-                       href="javascript:void(0)">
+                    <a class="sidebar-link" href="javascript:void(0)">
 
                         <span>
                             <i class="ti ti-arrows-transfer-down"></i>
@@ -230,8 +271,7 @@
 
                 <li class="sidebar-item">
 
-                    <a class="sidebar-link"
-                       href="javascript:void(0)">
+                    <a class="sidebar-link" href="javascript:void(0)">
 
                         <span>
                             <i class="ti ti-clock-hour-4"></i>
@@ -252,8 +292,7 @@
 
                 <li class="sidebar-item">
 
-                    <a class="sidebar-link"
-                       href="javascript:void(0)">
+                    <a class="sidebar-link" href="javascript:void(0)">
 
                         <span>
                             <i class="ti ti-file-certificate"></i>
@@ -274,8 +313,7 @@
 
                 <li class="sidebar-item">
 
-                    <a class="sidebar-link"
-                       href="javascript:void(0)">
+                    <a class="sidebar-link" href="javascript:void(0)">
 
                         <span>
                             <i class="ti ti-currency-dollar"></i>
@@ -291,8 +329,7 @@
 
                 <li class="sidebar-item">
 
-                    <a class="sidebar-link"
-                       href="javascript:void(0)">
+                    <a class="sidebar-link" href="javascript:void(0)">
 
                         <span>
                             <i class="ti ti-chart-bar"></i>
@@ -308,8 +345,7 @@
 
                 <li class="sidebar-item">
 
-                    <a class="sidebar-link"
-                       href="javascript:void(0)">
+                    <a class="sidebar-link" href="javascript:void(0)">
 
                         <span>
                             <i class="ti ti-settings"></i>

@@ -5,7 +5,7 @@ namespace App\Models;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Vehicle extends Model
@@ -28,6 +28,11 @@ class Vehicle extends Model
         'owner_identification',
         'fuel_capacity',
         'current_odometer',
+        'tare_weight_kg',
+        'max_weight_kg',
+        'length_m',
+        'width_m',
+        'height_m',
         'registration_expiration_date',
         'technical_review_expiration_date',
         'insurance_expiration_date',
@@ -38,6 +43,7 @@ class Vehicle extends Model
         'operational_status',
         'notes',
         'is_active',
+
     ];
 
     protected function casts(): array
@@ -46,6 +52,11 @@ class Vehicle extends Model
             'year' => 'integer',
             'fuel_capacity' => 'decimal:2',
             'current_odometer' => 'decimal:2',
+            'tare_weight_kg' => 'decimal:2',
+            'max_weight_kg' => 'decimal:2',
+            'length_m' => 'decimal:2',
+            'width_m' => 'decimal:2',
+            'height_m' => 'decimal:2',
             'registration_expiration_date' => 'date',
             'technical_review_expiration_date' => 'date',
             'insurance_expiration_date' => 'date',
@@ -53,10 +64,7 @@ class Vehicle extends Model
         ];
     }
 
-    public function chassis(): HasMany
-    {
-        return $this->hasMany(Chassis::class);
-    }
+
 
     public function getDisplayNameAttribute(): string
     {
