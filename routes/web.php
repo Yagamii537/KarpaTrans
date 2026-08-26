@@ -17,6 +17,12 @@ use App\Http\Controllers\WorkOrderController;
 use App\Http\Controllers\TripController;
 use App\Http\Controllers\TripTimeController;
 use App\Http\Controllers\StandbyController;
+use App\Http\Controllers\TripTransferController;
+use App\Http\Controllers\TransferAssignmentController;
+use App\Http\Controllers\TransferEventController;
+use App\Http\Controllers\SystemSettingController;
+use App\Http\Controllers\TripCostController;
+use App\Http\Controllers\ReportController;
 
 Route::middleware('guest')->group(function () {
     Route::get('/', function () {
@@ -31,8 +37,15 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
-    Route::get('/dashboard', [DashboardController::class, 'index'])
-        ->name('dashboard');
+
+
+    Route::get(
+        '/dashboard',
+        [
+            DashboardController::class,
+            'index'
+        ]
+    )->name('dashboard');
 
     Route::resource('clients', ClientController::class);
     Route::resource('plants', PlantController::class);
@@ -105,6 +118,125 @@ Route::middleware('auth')->group(function () {
         '/standby',
         [StandbyController::class, 'index']
     )->name('standby.index');
+
+    Route::get(
+        '/transfers',
+        [TripTransferController::class, 'index']
+    )->name('transfers.index');
+
+
+    Route::get(
+        '/trips/{trip}/transfers/create',
+        [TripTransferController::class, 'create']
+    )->name('transfers.create');
+
+
+    Route::post(
+        '/trips/{trip}/transfers',
+        [TripTransferController::class, 'store']
+    )->name('transfers.store');
+
+
+    Route::get(
+        '/transfers/{transfer}',
+        [TripTransferController::class, 'show']
+    )->name('transfers.show');
+
+
+    Route::post(
+        '/transfers/{transfer}/cancel',
+        [TripTransferController::class, 'cancel']
+    )->name('transfers.cancel');
+
+
+    Route::post(
+        '/transfers/{transfer}/assign',
+        [TransferAssignmentController::class, 'store']
+    )->name('transfers.assign');
+
+
+    Route::post(
+        '/transfers/{transfer}/events',
+        [TransferEventController::class, 'store']
+    )->name('transfers.events.store');
+
+    Route::get(
+        '/settings',
+        [
+            SystemSettingController::class,
+            'edit'
+        ]
+    )->name('settings.edit');
+
+
+    Route::put(
+        '/settings',
+        [
+            SystemSettingController::class,
+            'update'
+        ]
+    )->name('settings.update');
+
+    Route::get(
+        '/costs',
+        [
+            TripCostController::class,
+            'index'
+        ]
+    )->name('costs.index');
+
+
+    Route::get(
+        '/trips/{trip}/costs',
+        [
+            TripCostController::class,
+            'trip'
+        ]
+    )->name('costs.trip');
+
+
+    Route::post(
+        '/trips/{trip}/costs',
+        [
+            TripCostController::class,
+            'store'
+        ]
+    )->name('costs.store');
+
+
+    Route::post(
+        '/trips/{trip}/costs/standby',
+        [
+            TripCostController::class,
+            'createStandby'
+        ]
+    )->name('costs.standby');
+
+
+    Route::post(
+        '/costs/{cost}/approve',
+        [
+            TripCostController::class,
+            'approve'
+        ]
+    )->name('costs.approve');
+
+
+    Route::post(
+        '/costs/{cost}/cancel',
+        [
+            TripCostController::class,
+            'cancel'
+        ]
+    )->name('costs.cancel');
+
+    Route::get(
+        '/reports',
+        [
+            ReportController::class,
+            'index'
+        ]
+    )->name('reports.index');
 
 
 

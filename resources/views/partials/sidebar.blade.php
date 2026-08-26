@@ -255,14 +255,19 @@
 
                 <li class="sidebar-item">
 
-                    <a class="sidebar-link" href="javascript:void(0)">
+                    <a class="sidebar-link" href="{{ route('transfers.index') }}">
 
                         <span>
-                            <i class="ti ti-arrows-transfer-down"></i>
+
+                            <i class="ti ti-arrows-exchange"></i>
+
                         </span>
 
+
                         <span class="hide-menu">
+
                             Transferencias
+
                         </span>
 
                     </a>
@@ -318,14 +323,18 @@
 
                 <li class="sidebar-item">
 
-                    <a class="sidebar-link" href="javascript:void(0)">
+                    <a class="sidebar-link" href="{{ route('costs.index') }}">
 
                         <span>
-                            <i class="ti ti-currency-dollar"></i>
+
+                            <i class="ti ti-receipt"></i>
+
                         </span>
 
                         <span class="hide-menu">
+
                             Costos y liquidaciones
+
                         </span>
 
                     </a>
@@ -334,14 +343,18 @@
 
                 <li class="sidebar-item">
 
-                    <a class="sidebar-link" href="javascript:void(0)">
+                    <a class="sidebar-link" href="{{ route('reports.index') }}">
 
                         <span>
-                            <i class="ti ti-chart-bar"></i>
+
+                            <i class="ti ti-report"></i>
+
                         </span>
 
                         <span class="hide-menu">
+
                             Reportes
+
                         </span>
 
                     </a>
@@ -350,14 +363,18 @@
 
                 <li class="sidebar-item">
 
-                    <a class="sidebar-link" href="javascript:void(0)">
+                    <a class="sidebar-link" href="{{ route('settings.edit') }}">
 
                         <span>
+
                             <i class="ti ti-settings"></i>
+
                         </span>
 
                         <span class="hide-menu">
+
                             Configuración
+
                         </span>
 
                     </a>

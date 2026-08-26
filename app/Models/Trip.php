@@ -17,28 +17,38 @@ class Trip extends Model
         'sequence_number',
         'service_number',
         'service_stage',
+
         'client_id',
         'client_name_snapshot',
+
         'subclient_id',
         'subclient_name_snapshot',
+
         'cargo_type_id',
         'cargo_type_name_snapshot',
+
         'booking_number',
         'customer_order_number',
+
         'operation_type',
         'service_type',
+
         'origin_type',
         'origin_location_id',
         'origin_plant_id',
         'origin_name_snapshot',
+
         'destination_type',
         'destination_location_id',
         'destination_plant_id',
         'destination_name_snapshot',
+
         'scheduled_start_at',
         'scheduled_end_at',
+
         'status',
         'notes',
+
         'created_by',
         'updated_by',
     ];
@@ -48,6 +58,7 @@ class Trip extends Model
         return [
             'sequence_number' => 'integer',
             'service_number' => 'integer',
+
             'scheduled_start_at' => 'datetime',
             'scheduled_end_at' => 'datetime',
         ];
@@ -61,48 +72,91 @@ class Trip extends Model
 
     public function workOrder()
     {
-        return $this->belongsTo(WorkOrder::class);
+        return $this->belongsTo(
+            WorkOrder::class
+        );
     }
 
     public function client()
     {
-        return $this->belongsTo(Client::class);
+        return $this->belongsTo(
+            Client::class
+        );
     }
 
     public function subclient()
     {
-        return $this->belongsTo(Subclient::class);
+        return $this->belongsTo(
+            Subclient::class
+        );
     }
 
     public function cargoType()
     {
-        return $this->belongsTo(CargoType::class);
+        return $this->belongsTo(
+            CargoType::class
+        );
     }
 
     public function assignments()
     {
-        return $this->hasMany(TripAssignment::class)
-            ->orderByDesc('assigned_at');
+        return $this->hasMany(
+            TripAssignment::class
+        )
+            ->orderByDesc(
+                'assigned_at'
+            );
     }
 
     public function activeAssignment()
     {
-        return $this->hasOne(TripAssignment::class)
-            ->whereNull('unassigned_at')
+        return $this->hasOne(
+            TripAssignment::class
+        )
+            ->whereNull(
+                'unassigned_at'
+            )
             ->latestOfMany();
     }
 
     public function statusHistory()
     {
-        return $this->hasMany(TripStatusHistory::class)
-            ->orderByDesc('changed_at');
+        return $this->hasMany(
+            TripStatusHistory::class
+        )
+            ->orderByDesc(
+                'changed_at'
+            );
     }
 
     public function times()
     {
-        return $this->hasMany(TripTime::class)
-            ->orderBy('event_at')
-            ->orderBy('id');
+        return $this->hasMany(
+            TripTime::class
+        )
+            ->orderBy(
+                'event_at'
+            )
+            ->orderBy(
+                'id'
+            );
+    }
+
+    public function standbyCalculation()
+    {
+        return $this->hasOne(
+            TripStandbyCalculation::class
+        );
+    }
+
+    public function transfers()
+    {
+        return $this->hasMany(
+            TripTransfer::class
+        )
+            ->orderByDesc(
+                'created_at'
+            );
     }
 
     /*
@@ -120,7 +174,7 @@ class Trip extends Model
             'AT_DESTINATION' => 'En destino',
             'COMPLETED' => 'Completado',
             'CANCELLED' => 'Cancelado',
-            default => $this->status,
+            default => $this->status ?: 'No definido',
         };
     }
 
@@ -158,12 +212,8 @@ class Trip extends Model
 
     /*
     |--------------------------------------------------------------------------
-    | EVENTOS OPERATIVOS
+    | EVENTOS
     |--------------------------------------------------------------------------
-    |
-    | Cada etapa solo muestra los eventos que realmente tienen sentido.
-    | La configuración puede ajustarse después si el cliente cambia el flujo.
-    |
     */
 
     public static function eventLabels(): array
@@ -227,7 +277,6 @@ class Trip extends Model
             ];
         }
 
-        // INMEDIATA: diferenciamos por tipo de operación.
         if ($this->operation_type === 'IMPORT') {
             return [
                 'ARRIVAL',
@@ -279,84 +328,203 @@ class Trip extends Model
         $available = [];
 
         foreach ($this->allowedEventTypes() as $eventType) {
-            if (in_array($eventType, $used, true)) {
+
+            if (
+                $eventType !== 'OTHER'
+                &&
+                in_array(
+                    $eventType,
+                    $used,
+                    true
+                )
+            ) {
                 continue;
             }
 
-            $prerequisites = $this->eventPrerequisites($eventType);
+            $prerequisites =
+                $this->eventPrerequisites(
+                    $eventType
+                );
 
-            $prerequisitesCompleted = collect($prerequisites)
-                ->every(fn(string $required) => in_array($required, $used, true));
+            $prerequisitesCompleted =
+                collect($prerequisites)
+                ->every(
+                    fn(string $required) =>
+                    in_array(
+                        $required,
+                        $used,
+                        true
+                    )
+                );
 
             if (!$prerequisitesCompleted) {
                 continue;
             }
 
-            $available[$eventType] = $labels[$eventType] ?? $eventType;
+            $available[$eventType] =
+                $labels[$eventType]
+                ?? $eventType;
         }
 
         return $available;
     }
 
-    public function eventPrerequisites(string $eventType): array
-    {
+    public function eventPrerequisites(
+        string $eventType
+    ): array {
+
         $common = [
             'ENTRY' => ['ARRIVAL'],
             'WAIT_START' => ['ARRIVAL'],
             'WAIT_END' => ['WAIT_START'],
         ];
 
-        if ($this->service_stage === 'POSITIONING') {
-            return array_merge($common, [
-                'POSITIONING' => ['ARRIVAL'],
-                'DEPARTURE' => ['POSITIONING'],
-            ])[$eventType] ?? [];
+        if (
+            $this->service_stage
+            === 'POSITIONING'
+        ) {
+
+            return array_merge(
+                $common,
+                [
+                    'POSITIONING' => [
+                        'ARRIVAL',
+                    ],
+
+                    'DEPARTURE' => [
+                        'POSITIONING',
+                    ],
+                ]
+            )[$eventType] ?? [];
         }
 
-        if ($this->service_stage === 'PICKUP') {
-            return array_merge($common, [
-                'PICKUP' => ['ARRIVAL'],
-                'DEPARTURE' => ['PICKUP'],
-                'PORT_ARRIVAL' => ['DEPARTURE'],
-                'DELIVERY' => ['DEPARTURE'],
-            ])[$eventType] ?? [];
+        if (
+            $this->service_stage
+            === 'PICKUP'
+        ) {
+
+            return array_merge(
+                $common,
+                [
+                    'PICKUP' => [
+                        'ARRIVAL',
+                    ],
+
+                    'DEPARTURE' => [
+                        'PICKUP',
+                    ],
+
+                    'PORT_ARRIVAL' => [
+                        'DEPARTURE',
+                    ],
+
+                    'DELIVERY' => [
+                        'DEPARTURE',
+                    ],
+                ]
+            )[$eventType] ?? [];
         }
 
-        if ($this->service_stage === 'TRANSFER') {
-            return array_merge($common, [
-                'DEPARTURE' => ['ARRIVAL'],
-                'DELIVERY' => ['DEPARTURE'],
-            ])[$eventType] ?? [];
+        if (
+            $this->service_stage
+            === 'TRANSFER'
+        ) {
+
+            return array_merge(
+                $common,
+                [
+                    'DEPARTURE' => [
+                        'ARRIVAL',
+                    ],
+
+                    'DELIVERY' => [
+                        'DEPARTURE',
+                    ],
+                ]
+            )[$eventType] ?? [];
         }
 
-        if ($this->operation_type === 'IMPORT') {
-            return array_merge($common, [
-                'UNLOAD_START' => ['ARRIVAL'],
-                'UNLOAD_END' => ['UNLOAD_START'],
-                'DEPARTURE' => ['UNLOAD_END'],
-                'DELIVERY' => ['DEPARTURE'],
-            ])[$eventType] ?? [];
+        if (
+            $this->operation_type
+            === 'IMPORT'
+        ) {
+
+            return array_merge(
+                $common,
+                [
+                    'UNLOAD_START' => [
+                        'ARRIVAL',
+                    ],
+
+                    'UNLOAD_END' => [
+                        'UNLOAD_START',
+                    ],
+
+                    'DEPARTURE' => [
+                        'UNLOAD_END',
+                    ],
+
+                    'DELIVERY' => [
+                        'DEPARTURE',
+                    ],
+                ]
+            )[$eventType] ?? [];
         }
 
-        if ($this->operation_type === 'EXPORT') {
-            return array_merge($common, [
-                'LOAD_START' => ['ARRIVAL'],
-                'LOAD_END' => ['LOAD_START'],
-                'DEPARTURE' => ['LOAD_END'],
-                'PORT_ARRIVAL' => ['DEPARTURE'],
-                'DELIVERY' => ['DEPARTURE'],
-            ])[$eventType] ?? [];
+        if (
+            $this->operation_type
+            === 'EXPORT'
+        ) {
+
+            return array_merge(
+                $common,
+                [
+                    'LOAD_START' => [
+                        'ARRIVAL',
+                    ],
+
+                    'LOAD_END' => [
+                        'LOAD_START',
+                    ],
+
+                    'DEPARTURE' => [
+                        'LOAD_END',
+                    ],
+
+                    'PORT_ARRIVAL' => [
+                        'DEPARTURE',
+                    ],
+
+                    'DELIVERY' => [
+                        'DEPARTURE',
+                    ],
+                ]
+            )[$eventType] ?? [];
         }
 
-        return array_merge($common, [
-            'DEPARTURE' => ['ARRIVAL'],
-            'DELIVERY' => ['DEPARTURE'],
-        ])[$eventType] ?? [];
+        return array_merge(
+            $common,
+            [
+                'DEPARTURE' => [
+                    'ARRIVAL',
+                ],
+
+                'DELIVERY' => [
+                    'DEPARTURE',
+                ],
+            ]
+        )[$eventType] ?? [];
     }
 
-    public function statusForEvent(string $eventType): ?string
-    {
-        if ($this->service_stage === 'POSITIONING') {
+    public function statusForEvent(
+        string $eventType
+    ): ?string {
+
+        if (
+            $this->service_stage
+            === 'POSITIONING'
+        ) {
+
             return match ($eventType) {
                 'POSITIONING' => 'AT_DESTINATION',
                 'DEPARTURE' => 'COMPLETED',
@@ -376,30 +544,76 @@ class Trip extends Model
     {
         $labels = self::eventLabels();
 
-        $mainSequence = match ($this->service_stage) {
-            'POSITIONING' => ['ARRIVAL', 'POSITIONING', 'DEPARTURE'],
-            'PICKUP' => ['ARRIVAL', 'PICKUP', 'DEPARTURE', 'PORT_ARRIVAL', 'DELIVERY'],
-            'TRANSFER' => ['ARRIVAL', 'DEPARTURE', 'DELIVERY'],
-            default => $this->operation_type === 'IMPORT'
-                ? ['ARRIVAL', 'UNLOAD_START', 'UNLOAD_END', 'DEPARTURE', 'DELIVERY']
-                : ($this->operation_type === 'EXPORT'
-                    ? ['ARRIVAL', 'LOAD_START', 'LOAD_END', 'DEPARTURE', 'PORT_ARRIVAL', 'DELIVERY']
-                    : ['ARRIVAL', 'DEPARTURE', 'DELIVERY']),
-        };
+        $mainSequence =
+            match ($this->service_stage) {
+
+                'POSITIONING' => [
+                    'ARRIVAL',
+                    'POSITIONING',
+                    'DEPARTURE',
+                ],
+
+                'PICKUP' => [
+                    'ARRIVAL',
+                    'PICKUP',
+                    'DEPARTURE',
+                    'PORT_ARRIVAL',
+                    'DELIVERY',
+                ],
+
+                'TRANSFER' => [
+                    'ARRIVAL',
+                    'DEPARTURE',
+                    'DELIVERY',
+                ],
+
+                default =>
+                $this->operation_type === 'IMPORT'
+
+                    ? [
+                        'ARRIVAL',
+                        'UNLOAD_START',
+                        'UNLOAD_END',
+                        'DEPARTURE',
+                        'DELIVERY',
+                    ]
+
+                    : (
+                        $this->operation_type === 'EXPORT'
+
+                        ? [
+                            'ARRIVAL',
+                            'LOAD_START',
+                            'LOAD_END',
+                            'DEPARTURE',
+                            'PORT_ARRIVAL',
+                            'DELIVERY',
+                        ]
+
+                        : [
+                            'ARRIVAL',
+                            'DEPARTURE',
+                            'DELIVERY',
+                        ]
+                    ),
+            };
 
         return implode(
             ' → ',
             array_map(
-                fn(string $eventType) => $labels[$eventType] ?? $eventType,
+                fn(string $eventType) =>
+                $labels[$eventType]
+                    ?? $eventType,
                 $mainSequence
             )
         );
     }
+
     /*
-|--------------------------------------------------------------------------
-| DEPENDENCIA ENTRE ETAPAS
-|--------------------------------------------------------------------------
-*/
+    |--------------------------------------------------------------------------
+    | POSICIÓN + RETIRO
+    |--------------------------------------------------------------------------
+    */
 
     public function previousStage()
     {
@@ -414,57 +628,72 @@ class Trip extends Model
         }
 
         return self::query()
+
             ->where(
                 'work_order_id',
                 $this->work_order_id
             )
+
             ->where(
                 'service_number',
                 $this->service_number
             )
+
             ->where(
                 'service_stage',
                 'POSITIONING'
             )
+
             ->first();
     }
-
 
     public function getIsStageUnlockedAttribute(): bool
     {
         /*
-     * Solo RETIRO depende de POSICIÓN.
-     */
+         * Solo RETIRO puede depender
+         * de otra etapa.
+         */
         if (
-            $this->service_stage !== 'PICKUP'
+            $this->service_stage
+            !== 'PICKUP'
         ) {
             return true;
         }
 
-
-        $positioning =
-            $this->previousStage();
-
-
         /*
-     * Si no existe viaje de posición,
-     * no bloqueamos para no dañar
-     * modalidades independientes.
-     */
-        if (!$positioning) {
+         * IMPORTANTE:
+         *
+         * Retiro independiente:
+         * siempre está desbloqueado.
+         */
+        if (
+            $this->workOrder
+            ?->service_modality
+            !== 'POSITIONING_PICKUP'
+        ) {
             return true;
         }
 
+        /*
+         * Posición + Retiro:
+         * debe existir Posición completada.
+         */
+        $positioning =
+            $this->previousStage();
+
+        if (!$positioning) {
+            return false;
+        }
 
         return $positioning->status
             === 'COMPLETED';
     }
 
-
     public function getStageProgressLabelAttribute(): string
     {
         if (
-            $this->workOrder?->service_modality
+            $this->workOrder
+            ?->service_modality
             === 'POSITIONING_PICKUP'
         ) {
 
@@ -481,14 +710,22 @@ class Trip extends Model
             };
         }
 
-
         return 'Etapa única';
     }
 
-    public function standbyCalculation()
+    /*
+|--------------------------------------------------------------------------
+| COSTOS
+|--------------------------------------------------------------------------
+*/
+
+    public function costs()
     {
-        return $this->hasOne(
-            \App\Models\TripStandbyCalculation::class
-        );
+        return $this->hasMany(
+            \App\Models\TripCost::class
+        )
+            ->orderByDesc(
+                'created_at'
+            );
     }
 }

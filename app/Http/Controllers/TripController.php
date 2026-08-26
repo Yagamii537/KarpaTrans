@@ -498,6 +498,12 @@ class TripController extends Controller
 
             'standbyCalculation',
 
+            /*
+            |--------------------------------------------------------------------------
+            | ASIGNACIONES DEL VIAJE
+            |--------------------------------------------------------------------------
+            */
+
             'assignments.driver',
 
             'assignments.vehicle',
@@ -510,7 +516,19 @@ class TripController extends Controller
 
             'assignments.releasedBy',
 
+            /*
+            |--------------------------------------------------------------------------
+            | HISTORIAL DEL VIAJE
+            |--------------------------------------------------------------------------
+            */
+
             'statusHistory.user',
+
+            /*
+            |--------------------------------------------------------------------------
+            | ASIGNACIÓN ACTIVA
+            |--------------------------------------------------------------------------
+            */
 
             'activeAssignment.driver',
 
@@ -522,12 +540,46 @@ class TripController extends Controller
 
             'activeAssignment.assignedBy',
 
+            /*
+            |--------------------------------------------------------------------------
+            | EVENTOS DEL VIAJE
+            |--------------------------------------------------------------------------
+            */
+
             'times.location',
 
             'times.plant',
 
             'times.creator',
 
+            /*
+            |--------------------------------------------------------------------------
+            | TRANSFERENCIAS RELACIONADAS
+            |--------------------------------------------------------------------------
+            */
+
+            'transfers.activeAssignment.driver',
+
+            'transfers.activeAssignment.vehicle',
+
+            'transfers.activeAssignment.chassis',
+
+            'transfers.activeAssignment.container',
+
+            /*
+             * Historial de recursos de la transferencia.
+             *
+             * Esto permite mostrar los recursos
+             * incluso después de completar la transferencia,
+             * cuando ya no existe activeAssignment.
+             */
+            'transfers.assignments.driver',
+
+            'transfers.assignments.vehicle',
+
+            'transfers.assignments.chassis',
+
+            'transfers.assignments.container',
 
         ]);
 
@@ -597,7 +649,9 @@ class TripController extends Controller
                 true
             )
 
-            ->orderBy('plate')
+            ->orderBy(
+                'plate'
+            )
 
             ->get();
 
@@ -610,7 +664,9 @@ class TripController extends Controller
                 true
             )
 
-            ->orderBy('code')
+            ->orderBy(
+                'code'
+            )
 
             ->get();
 
@@ -638,7 +694,9 @@ class TripController extends Controller
                 true
             )
 
-            ->orderBy('name')
+            ->orderBy(
+                'name'
+            )
 
             ->get();
 
@@ -651,9 +709,13 @@ class TripController extends Controller
                 true
             )
 
-            ->with('client')
+            ->with(
+                'client'
+            )
 
-            ->orderBy('name')
+            ->orderBy(
+                'name'
+            )
 
             ->get();
 
@@ -783,7 +845,9 @@ class TripController extends Controller
 
         return view(
             'trips.edit',
-            compact('trip')
+            compact(
+                'trip'
+            )
         );
     }
 
@@ -887,6 +951,13 @@ class TripController extends Controller
         }
 
 
+        /*
+         * No eliminamos un viaje si ya existe
+         * cualquier información operativa asociada.
+         *
+         * Ahora también se consideran
+         * las transferencias relacionadas.
+         */
         if (
             $trip
             ->assignments()
@@ -897,13 +968,19 @@ class TripController extends Controller
             $trip
             ->times()
             ->exists()
+
+            ||
+
+            $trip
+            ->transfers()
+            ->exists()
         ) {
 
             return back()
                 ->withErrors([
 
                     'delete' =>
-                    'El viaje ya posee información operativa y no puede eliminarse.',
+                    'El viaje ya posee información operativa o transferencias registradas y no puede eliminarse.',
 
                 ]);
         }

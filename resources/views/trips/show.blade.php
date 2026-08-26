@@ -126,6 +126,14 @@
 
             </a>
 
+            <a href="{{ route('costs.trip', $trip) }}" class="btn btn-outline-success">
+
+                <i class="ti ti-receipt me-1"></i>
+
+                Costos
+
+            </a>
+
 
             @if (!in_array($trip->status, ['COMPLETED', 'CANCELLED']))
                 <a href="{{ route('trips.edit', $trip) }}" class="btn btn-outline-primary">
@@ -136,6 +144,18 @@
 
                 </a>
             @endif
+
+            @if (!in_array($trip->status, ['COMPLETED', 'CANCELLED']))
+                <a href="{{ route('transfers.create', $trip) }}" class="btn btn-outline-secondary">
+
+                    <i class="ti ti-arrows-exchange me-1"></i>
+
+                    Registrar transferencia
+
+                </a>
+            @endif
+
+
 
         </div>
 
@@ -1621,7 +1641,7 @@
 
 
                     @forelse ($trip->times
-                                            as $event)
+                                                                        as $event)
                         <div class="d-flex gap-3 mb-4">
 
                             <div>
@@ -1762,7 +1782,7 @@
                             <tbody>
 
                                 @forelse ($trip->assignments
-                                                        as $assignment)
+                                                                                    as $assignment)
                                     <tr>
 
                                         <td>
@@ -2074,7 +2094,7 @@
 
 
                     @forelse ($trip->statusHistory
-                                            as $history)
+                                                                        as $history)
                         <div class="border-start border-2 ps-3 mb-4">
 
                             <div class="fw-semibold">
