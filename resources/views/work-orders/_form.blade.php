@@ -1,6 +1,9 @@
 <div class="row">
 
+    {{-- ========================================================= --}}
     {{-- CLIENTE --}}
+    {{-- ========================================================= --}}
+
     <div class="col-12">
 
         <h5 class="fw-semibold mb-3">
@@ -9,20 +12,25 @@
 
     </div>
 
+
     <div class="col-md-4 mb-3">
 
         <label class="form-label">
             Cliente *
         </label>
 
-        <select name="client_id" id="client_id" class="form-select" required>
+        <select name="client_id" id="client_id" class="form-select @error('client_id') is-invalid @enderror" required>
 
             <option value="">
                 Seleccione cliente
             </option>
 
+
             @foreach ($clients as $client)
-                <option value="{{ $client->id }}" @selected(old('client_id', $workOrder->client_id ?? '') == $client->id)>
+                <option value="{{ $client->id }}" data-free-loading="{{ $client->free_loading_hours ?? 0 }}"
+                    data-free-unloading="{{ $client->free_unloading_hours ?? 0 }}"
+                    data-count-start="{{ $client->service_time_start ?? 'requested_time' }}"
+                    data-fraction="{{ $client->standby_fraction_minutes ?? 30 }}" @selected(old('client_id', $workOrder->client_id ?? '') == $client->id)>
 
                     {{ $client->business_name }}
 
@@ -31,7 +39,14 @@
 
         </select>
 
+        @error('client_id')
+            <div class="invalid-feedback">
+                {{ $message }}
+            </div>
+        @enderror
+
     </div>
+
 
     <div class="col-md-4 mb-3">
 
@@ -45,9 +60,14 @@
                 Sin subcliente
             </option>
 
+
             @foreach ($subclients as $subclient)
                 <option value="{{ $subclient->id }}" data-client="{{ $subclient->client_id }}"
-                    @selected(old('subclient_id', $workOrder->subclient_id ?? '') == $subclient->id)>
+                    data-inherits="{{ $subclient->inherits_operational_rules ? '1' : '0' }}"
+                    data-free-loading="{{ $subclient->free_loading_hours ?? 0 }}"
+                    data-free-unloading="{{ $subclient->free_unloading_hours ?? 0 }}"
+                    data-count-start="{{ $subclient->service_time_start ?? 'requested_time' }}"
+                    data-fraction="{{ $subclient->standby_fraction_minutes ?? 30 }}" @selected(old('subclient_id', $workOrder->subclient_id ?? '') == $subclient->id)>
 
                     {{ $subclient->business_name }}
 
@@ -58,29 +78,38 @@
 
     </div>
 
+
     <div class="col-md-4 mb-3">
 
         <label class="form-label">
             Tipo de carga
         </label>
 
-        <select name="cargo_type_id" id="cargo_type_id" class="form-select">
+        <select name="cargo_type_id" id="cargo_type_id"
+            class="form-select @error('cargo_type_id') is-invalid @enderror">
 
             <option value="">
-                Seleccione carga
+                Seleccione primero un cliente
             </option>
-
-            @foreach ($cargoTypes as $cargoType)
-                <option value="{{ $cargoType->id }}" @selected(old('cargo_type_id', $workOrder->cargo_type_id ?? '') == $cargoType->id)>
-
-                    {{ $cargoType->name }}
-
-                </option>
-            @endforeach
 
         </select>
 
+        @error('cargo_type_id')
+            <div class="invalid-feedback">
+                {{ $message }}
+            </div>
+        @enderror
+
+
+        <small class="text-muted" id="cargo_type_help">
+
+            Las cargas dependen del cliente
+            y subcliente seleccionados.
+
+        </small>
+
     </div>
+
 
     <div class="col-md-4 mb-3">
 
@@ -93,6 +122,7 @@
 
     </div>
 
+
     <div class="col-md-4 mb-3">
 
         <label class="form-label">
@@ -103,6 +133,7 @@
             value="{{ old('customer_order_number', $workOrder->customer_order_number ?? '') }}">
 
     </div>
+
 
     <div class="col-md-4 mb-3">
 
@@ -115,7 +146,11 @@
 
     </div>
 
-    {{-- OPERACION --}}
+
+    {{-- ========================================================= --}}
+    {{-- OPERACIÓN --}}
+    {{-- ========================================================= --}}
+
     <div class="col-12">
 
         <hr>
@@ -126,13 +161,14 @@
 
     </div>
 
-    <div class="col-md-3 mb-3">
+
+    <div class="col-md-4 mb-3">
 
         <label class="form-label">
             Tipo de operación *
         </label>
 
-        <select name="operation_type" class="form-select" required>
+        <select name="operation_type" id="operation_type" class="form-select" required>
 
             @foreach ([
         'EXPORT' => 'Exportación',
@@ -151,23 +187,22 @@
 
     </div>
 
-    <div class="col-md-3 mb-3">
+
+    <div class="col-md-4 mb-3">
 
         <label class="form-label">
-            Tipo de servicio *
+            Modalidad del servicio *
         </label>
 
-        <select name="service_type" class="form-select" required>
+        <select name="service_modality" id="service_modality" class="form-select" required>
 
             @foreach ([
-        'TRANSPORT' => 'Transporte',
-        'POSITIONING' => 'Posicionamiento',
+        'IMMEDIATE' => 'Inmediata',
+        'POSITIONING' => 'Posición',
         'PICKUP' => 'Retiro',
-        'POSITIONING_PICKUP' => 'Posición y retiro',
-        'TRANSFER' => 'Transferencia',
-        'OTHER' => 'Otro',
+        'POSITIONING_PICKUP' => 'Posición + Retiro',
     ] as $value => $label)
-                <option value="{{ $value }}" @selected(old('service_type', $workOrder->service_type ?? 'TRANSPORT') === $value)>
+                <option value="{{ $value }}" @selected(old('service_modality', $workOrder->service_modality ?? 'IMMEDIATE') === $value)>
 
                     {{ $label }}
 
@@ -176,7 +211,16 @@
 
         </select>
 
+
+        <small class="text-muted">
+
+            Define cómo se ejecutará físicamente
+            el servicio.
+
+        </small>
+
     </div>
+
 
     <div class="col-md-4 mb-3">
 
@@ -189,6 +233,7 @@
             <option value="">
                 Sin planta
             </option>
+
 
             @foreach ($plants as $plant)
                 <option value="{{ $plant->id }}" data-client="{{ $plant->client_id }}"
@@ -203,18 +248,30 @@
 
     </div>
 
-    <div class="col-md-2 mb-3">
+
+    <div class="col-md-3 mb-3">
 
         <label class="form-label">
-            Viajes solicitados *
+            Cantidad solicitada *
         </label>
 
         <input type="number" name="requested_trips" min="1" max="500" class="form-control"
             value="{{ old('requested_trips', $workOrder->requested_trips ?? 1) }}" required>
 
+        <small class="text-muted">
+
+            Cantidad de servicios/contenedores
+            solicitados.
+
+        </small>
+
     </div>
 
-    {{-- ORIGEN --}}
+
+    {{-- ========================================================= --}}
+    {{-- ORIGEN DESTINO --}}
+    {{-- ========================================================= --}}
+
     <div class="col-12">
 
         <hr>
@@ -224,6 +281,7 @@
         </h5>
 
     </div>
+
 
     <div class="col-md-2 mb-3">
 
@@ -236,16 +294,19 @@
             <option value="LOCATION" @selected(old('origin_type', $workOrder->origin_type ?? 'LOCATION') === 'LOCATION')>
 
                 Ubicación
+
             </option>
 
             <option value="PLANT" @selected(old('origin_type', $workOrder->origin_type ?? '') === 'PLANT')>
 
                 Planta
+
             </option>
 
         </select>
 
     </div>
+
 
     <div class="col-md-4 mb-3" id="origin_location_group">
 
@@ -253,11 +314,12 @@
             Ubicación origen
         </label>
 
-        <select name="origin_location_id" class="form-select">
+        <select name="origin_location_id" id="origin_location_id" class="form-select">
 
             <option value="">
                 Seleccione
             </option>
+
 
             @foreach ($locations as $location)
                 <option value="{{ $location->id }}" @selected(old('origin_location_id', $workOrder->origin_location_id ?? '') == $location->id)>
@@ -272,6 +334,7 @@
 
     </div>
 
+
     <div class="col-md-4 mb-3" id="origin_plant_group">
 
         <label class="form-label">
@@ -283,6 +346,7 @@
             <option value="">
                 Seleccione
             </option>
+
 
             @foreach ($plants as $plant)
                 <option value="{{ $plant->id }}" data-client="{{ $plant->client_id }}"
@@ -297,6 +361,7 @@
 
     </div>
 
+
     <div class="col-md-2 mb-3">
 
         <label class="form-label">
@@ -308,16 +373,19 @@
             <option value="LOCATION" @selected(old('destination_type', $workOrder->destination_type ?? 'LOCATION') === 'LOCATION')>
 
                 Ubicación
+
             </option>
 
             <option value="PLANT" @selected(old('destination_type', $workOrder->destination_type ?? '') === 'PLANT')>
 
                 Planta
+
             </option>
 
         </select>
 
     </div>
+
 
     <div class="col-md-4 mb-3" id="destination_location_group">
 
@@ -325,11 +393,12 @@
             Ubicación destino
         </label>
 
-        <select name="destination_location_id" class="form-select">
+        <select name="destination_location_id" id="destination_location_id" class="form-select">
 
             <option value="">
                 Seleccione
             </option>
+
 
             @foreach ($locations as $location)
                 <option value="{{ $location->id }}" @selected(old('destination_location_id', $workOrder->destination_location_id ?? '') == $location->id)>
@@ -344,6 +413,7 @@
 
     </div>
 
+
     <div class="col-md-4 mb-3" id="destination_plant_group">
 
         <label class="form-label">
@@ -355,6 +425,7 @@
             <option value="">
                 Seleccione
             </option>
+
 
             @foreach ($plants as $plant)
                 <option value="{{ $plant->id }}" data-client="{{ $plant->client_id }}"
@@ -369,7 +440,11 @@
 
     </div>
 
-    {{-- PLANIFICACION --}}
+
+    {{-- ========================================================= --}}
+    {{-- PLANIFICACIÓN --}}
+    {{-- ========================================================= --}}
+
     <div class="col-12">
 
         <hr>
@@ -379,6 +454,7 @@
         </h5>
 
     </div>
+
 
     <div class="col-md-4 mb-3">
 
@@ -395,6 +471,7 @@
 
     </div>
 
+
     <div class="col-md-4 mb-3">
 
         <label class="form-label">
@@ -405,6 +482,7 @@
             value="{{ old('requested_time', $workOrder->requested_time ?? '') }}">
 
     </div>
+
 
     <div class="col-md-4 mb-3">
 
@@ -420,16 +498,241 @@
 
     </div>
 
+
+    {{-- ========================================================= --}}
+    {{-- STAND-BY --}}
+    {{-- ========================================================= --}}
+
+    <div class="col-12">
+
+        <hr>
+
+        <h5 class="fw-semibold mb-2">
+            Parametrización de Stand-by
+        </h5>
+
+        <p class="text-muted mb-3">
+
+            La regla se obtiene automáticamente
+            del cliente o subcliente y queda
+            guardada en esta orden.
+
+        </p>
+
+    </div>
+
+
+    <div class="col-md-4 mb-3">
+
+        <label class="form-label">
+            Proceso *
+        </label>
+
+        <select name="standby_process_type" id="standby_process_type" class="form-select" required>
+
+            <option value="LOAD" @selected(old('standby_process_type', $workOrder->standby_process_type ?? 'LOAD') === 'LOAD')>
+
+                Carga
+
+            </option>
+
+
+            <option value="UNLOAD" @selected(old('standby_process_type', $workOrder->standby_process_type ?? '') === 'UNLOAD')>
+
+                Descarga
+
+            </option>
+
+        </select>
+
+    </div>
+
+
+    <div class="col-md-8 mb-3">
+
+        <div class="alert alert-light border mb-0">
+
+            <div class="row">
+
+                <div class="col-md-4">
+
+                    <small class="text-muted d-block">
+                        Horas libres
+                    </small>
+
+                    <strong id="rule_free_hours">
+                        -
+                    </strong>
+
+                </div>
+
+
+                <div class="col-md-4">
+
+                    <small class="text-muted d-block">
+                        Inicio conteo
+                    </small>
+
+                    <strong id="rule_count_start">
+                        -
+                    </strong>
+
+                </div>
+
+
+                <div class="col-md-4">
+
+                    <small class="text-muted d-block">
+                        Fracción
+                    </small>
+
+                    <strong id="rule_fraction">
+                        -
+                    </strong>
+
+                </div>
+
+            </div>
+
+
+            <div class="mt-2">
+
+                <small class="text-muted">
+
+                    Fuente:
+                    <strong id="rule_source">
+                        -
+                    </strong>
+
+                </small>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    {{-- EXCEPCIÓN --}}
+
+    <div class="col-12 mb-3">
+
+        <div class="form-check form-switch">
+
+            <input type="checkbox" name="standby_rule_overridden" value="1" id="standby_rule_overridden"
+                class="form-check-input" @checked(old('standby_rule_overridden', $workOrder->standby_rule_overridden ?? false))>
+
+            <label class="form-check-label fw-semibold" for="standby_rule_overridden">
+
+                Aplicar excepción manual de Stand-by
+
+            </label>
+
+        </div>
+
+        <small class="text-muted">
+
+            Utilícelo cuando la operación tenga
+            condiciones especiales autorizadas.
+
+        </small>
+
+    </div>
+
+
+    <div class="col-12" id="standby_override_section" style="display:none;">
+
+        <div class="row">
+
+            <div class="col-md-3 mb-3">
+
+                <label class="form-label">
+                    Horas libres *
+                </label>
+
+                <input type="number" name="standby_override_free_hours" id="standby_override_free_hours"
+                    min="0" max="999" class="form-control"
+                    value="{{ old(
+                        'standby_override_free_hours',
+                        $workOrder->standby_rule_overridden ?? false ? $workOrder->standby_free_hours : '',
+                    ) }}">
+
+            </div>
+
+
+            <div class="col-md-3 mb-3">
+
+                <label class="form-label">
+                    Inicio del conteo *
+                </label>
+
+                <select name="standby_override_count_start_type" id="standby_override_count_start_type"
+                    class="form-select">
+
+                    <option value="REQUESTED_TIME" @selected(old('standby_override_count_start_type', $workOrder->standby_count_start_type ?? '') === 'REQUESTED_TIME')>
+
+                        Hora solicitada
+
+                    </option>
+
+
+                    <option value="ARRIVAL_TIME" @selected(old('standby_override_count_start_type', $workOrder->standby_count_start_type ?? '') === 'ARRIVAL_TIME')>
+
+                        Hora real de llegada
+
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="col-md-3 mb-3">
+
+                <label class="form-label">
+                    Fracción (min) *
+                </label>
+
+                <input type="number" name="standby_override_fraction_minutes" id="standby_override_fraction_minutes"
+                    min="1" max="1440" class="form-control"
+                    value="{{ old(
+                        'standby_override_fraction_minutes',
+                        $workOrder->standby_rule_overridden ?? false ? $workOrder->standby_fraction_minutes : '',
+                    ) }}">
+
+            </div>
+
+
+            <div class="col-md-12 mb-3">
+
+                <label class="form-label">
+                    Motivo de la excepción *
+                </label>
+
+                <textarea name="standby_override_reason" id="standby_override_reason" rows="2" class="form-control"
+                    placeholder="Explique por qué se modificó la regla estándar">{{ old('standby_override_reason', $workOrder->standby_override_reason ?? '') }}</textarea>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    {{-- ========================================================= --}}
     {{-- CONTENEDOR --}}
+    {{-- ========================================================= --}}
+
     <div class="col-12">
 
         <hr>
 
         <h5 class="fw-semibold mb-3">
-            Requerimiento de carga y contenedor
+            Carga y contenedor
         </h5>
 
     </div>
+
 
     <div class="col-md-3 mb-3">
 
@@ -462,6 +765,7 @@
 
     </div>
 
+
     <div class="col-md-3 mb-3">
 
         <label class="form-label">
@@ -492,16 +796,18 @@
 
     </div>
 
+
     <div class="col-md-3 mb-3">
 
         <label class="form-label">
             Peso estimado (kg)
         </label>
 
-        <input type="number" step="0.01" min="0" name="estimated_weight_kg" class="form-control"
+        <input type="number" name="estimated_weight_kg" step="0.01" min="0" class="form-control"
             value="{{ old('estimated_weight_kg', $workOrder->estimated_weight_kg ?? '') }}">
 
     </div>
+
 
     <div class="col-md-3 mb-3">
 
@@ -529,6 +835,7 @@
 
     </div>
 
+
     <div class="col-12 mb-3">
 
         <label class="form-label">
@@ -538,6 +845,7 @@
         <textarea name="cargo_description" rows="2" class="form-control">{{ old('cargo_description', $workOrder->cargo_description ?? '') }}</textarea>
 
     </div>
+
 
     <div class="col-12 mb-4">
 
@@ -551,14 +859,16 @@
 
 </div>
 
+
 <div class="d-flex justify-content-end gap-2">
 
     <a href="{{ route('work-orders.index') }}" class="btn btn-light">
 
         Cancelar
+
     </a>
 
-    <button class="btn btn-primary">
+    <button type="submit" class="btn btn-primary">
 
         <i class="ti ti-device-floppy me-1"></i>
 
@@ -570,171 +880,560 @@
 
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener(
+        'DOMContentLoaded',
+        function() {
 
-        const clientSelect =
-            document.getElementById('client_id');
+            const clientSelect =
+                document.getElementById('client_id');
 
-        const subclientSelect =
-            document.getElementById('subclient_id');
+            const subclientSelect =
+                document.getElementById('subclient_id');
 
-        const plantSelect =
-            document.getElementById('plant_id');
+            const cargoTypeSelect =
+                document.getElementById('cargo_type_id');
 
-        const originPlant =
-            document.getElementById('origin_plant_id');
+            const cargoTypeHelp =
+                document.getElementById('cargo_type_help');
 
-        const destinationPlant =
-            document.getElementById('destination_plant_id');
+            const operationType =
+                document.getElementById('operation_type');
 
-        const originType =
-            document.getElementById('origin_type');
+            const standbyProcess =
+                document.getElementById('standby_process_type');
 
-        const destinationType =
-            document.getElementById('destination_type');
+            const overrideCheck =
+                document.getElementById('standby_rule_overridden');
 
-        const originLocationGroup =
-            document.getElementById('origin_location_group');
-
-        const originPlantGroup =
-            document.getElementById('origin_plant_group');
-
-        const destinationLocationGroup =
-            document.getElementById('destination_location_group');
-
-        const destinationPlantGroup =
-            document.getElementById('destination_plant_group');
+            const overrideSection =
+                document.getElementById('standby_override_section');
 
 
-        function filterByClient(select) {
+            const ruleFreeHours =
+                document.getElementById('rule_free_hours');
 
-            if (!select) {
-                return;
+            const ruleCountStart =
+                document.getElementById('rule_count_start');
+
+            const ruleFraction =
+                document.getElementById('rule_fraction');
+
+            const ruleSource =
+                document.getElementById('rule_source');
+
+
+            const plantSelect =
+                document.getElementById('plant_id');
+
+            const originPlant =
+                document.getElementById('origin_plant_id');
+
+            const destinationPlant =
+                document.getElementById('destination_plant_id');
+
+            const originType =
+                document.getElementById('origin_type');
+
+            const destinationType =
+                document.getElementById('destination_type');
+
+            const originLocationGroup =
+                document.getElementById('origin_location_group');
+
+            const originPlantGroup =
+                document.getElementById('origin_plant_group');
+
+            const destinationLocationGroup =
+                document.getElementById('destination_location_group');
+
+            const destinationPlantGroup =
+                document.getElementById('destination_plant_group');
+
+
+            const initialCargo =
+                @json(old('cargo_type_id', $workOrder->cargo_type_id ?? null));
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | CLIENTE
+            |--------------------------------------------------------------------------
+            */
+
+            function filterByClient(select) {
+                if (!select) {
+                    return;
+                }
+
+                const clientId =
+                    clientSelect.value;
+
+
+                Array.from(
+                    select.options
+                ).forEach(
+                    function(option) {
+
+                        if (!option.value) {
+                            option.hidden = false;
+                            return;
+                        }
+
+                        option.hidden =
+                            option.dataset.client !==
+                            clientId;
+                    }
+                );
             }
 
-            const selectedClient =
-                clientSelect.value;
 
-            Array.from(select.options)
-                .forEach(function(option) {
+            function filterClientData() {
+                filterByClient(
+                    subclientSelect
+                );
 
-                    if (!option.value) {
-                        option.hidden = false;
-                        return;
+                filterByClient(
+                    plantSelect
+                );
+
+                filterByClient(
+                    originPlant
+                );
+
+                filterByClient(
+                    destinationPlant
+                );
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | STAND-BY
+            |--------------------------------------------------------------------------
+            */
+
+            function getClientRule() {
+                if (!clientSelect.value) {
+                    return null;
+                }
+
+                const option =
+                    clientSelect.options[
+                        clientSelect.selectedIndex
+                    ];
+
+                return {
+
+                    loading: Number(
+                        option.dataset.freeLoading ||
+                        0
+                    ),
+
+                    unloading: Number(
+                        option.dataset.freeUnloading ||
+                        0
+                    ),
+
+                    countStart: option.dataset.countStart ||
+                        'requested_time',
+
+                    fraction: Number(
+                        option.dataset.fraction ||
+                        30
+                    ),
+
+                    source: 'Cliente'
+                };
+            }
+
+
+            function getEffectiveRule() {
+                const clientRule =
+                    getClientRule();
+
+
+                if (!clientRule) {
+                    return null;
+                }
+
+
+                if (!subclientSelect.value) {
+                    return clientRule;
+                }
+
+
+                const option =
+                    subclientSelect.options[
+                        subclientSelect.selectedIndex
+                    ];
+
+
+                if (
+                    option.dataset.inherits ===
+                    '1'
+                ) {
+
+                    return clientRule;
+                }
+
+
+                return {
+
+                    loading: Number(
+                        option.dataset.freeLoading ||
+                        0
+                    ),
+
+                    unloading: Number(
+                        option.dataset.freeUnloading ||
+                        0
+                    ),
+
+                    countStart: option.dataset.countStart ||
+                        'requested_time',
+
+                    fraction: Number(
+                        option.dataset.fraction ||
+                        30
+                    ),
+
+                    source: 'Subcliente'
+                };
+            }
+
+
+            function refreshStandbyRule() {
+                const rule =
+                    getEffectiveRule();
+
+
+                if (!rule) {
+
+                    ruleFreeHours.textContent =
+                        '-';
+
+                    ruleCountStart.textContent =
+                        '-';
+
+                    ruleFraction.textContent =
+                        '-';
+
+                    ruleSource.textContent =
+                        '-';
+
+                    return;
+                }
+
+
+                const freeHours =
+                    standbyProcess.value ===
+                    'UNLOAD' ?
+                    rule.unloading :
+                    rule.loading;
+
+
+                ruleFreeHours.textContent =
+                    freeHours + ' h';
+
+
+                ruleCountStart.textContent =
+                    rule.countStart ===
+                    'arrival_time' ?
+                    'Hora real de llegada' :
+                    'Hora solicitada';
+
+
+                ruleFraction.textContent =
+                    rule.fraction + ' min';
+
+
+                ruleSource.textContent =
+                    rule.source;
+            }
+
+
+            /*
+             * Exportación:
+             * normalmente carga.
+             *
+             * Importación:
+             * normalmente descarga.
+             */
+            function suggestStandbyProcess() {
+                if (
+                    operationType.value ===
+                    'EXPORT'
+                ) {
+
+                    standbyProcess.value =
+                        'LOAD';
+
+                } else if (
+                    operationType.value ===
+                    'IMPORT'
+                ) {
+
+                    standbyProcess.value =
+                        'UNLOAD';
+                }
+
+
+                refreshStandbyRule();
+            }
+
+
+            function toggleOverride() {
+                overrideSection.style.display =
+                    overrideCheck.checked ?
+                    '' :
+                    'none';
+            }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | CARGAS
+            |--------------------------------------------------------------------------
+            */
+
+            async function loadCargoTypes(
+                preserve = false
+            ) {
+
+                if (!clientSelect.value) {
+
+                    cargoTypeSelect.innerHTML =
+                        '<option value="">Seleccione primero un cliente</option>';
+
+                    return;
+                }
+
+
+                cargoTypeSelect.disabled =
+                    true;
+
+                cargoTypeSelect.innerHTML =
+                    '<option value="">Cargando...</option>';
+
+
+                try {
+
+                    const url =
+                        new URL(
+                            @json(route('cargo-types.available'))
+                        );
+
+
+                    url.searchParams.set(
+                        'client_id',
+                        clientSelect.value
+                    );
+
+
+                    if (
+                        subclientSelect.value
+                    ) {
+
+                        url.searchParams.set(
+                            'subclient_id',
+                            subclientSelect.value
+                        );
                     }
 
-                    const client =
-                        option.dataset.client;
 
-                    option.hidden =
-                        client !== selectedClient;
-                });
+                    const response =
+                        await fetch(
+                            url.toString(), {
+                                headers: {
+                                    'Accept': 'application/json'
+                                }
+                            }
+                        );
 
-            const selectedOption =
-                select.options[
-                    select.selectedIndex
-                ];
 
-            if (
-                selectedOption &&
-                selectedOption.value &&
-                selectedOption.dataset.client !==
-                selectedClient
-            ) {
+                    if (!response.ok) {
+                        throw new Error();
+                    }
 
-                select.value = '';
+
+                    const cargos =
+                        await response.json();
+
+
+                    cargoTypeSelect.innerHTML =
+                        '<option value="">Seleccione tipo de carga</option>';
+
+
+                    cargos.forEach(
+                        function(cargo) {
+
+                            const option =
+                                document.createElement(
+                                    'option'
+                                );
+
+                            option.value =
+                                cargo.id;
+
+                            option.textContent =
+                                cargo.name;
+
+
+                            if (
+                                preserve &&
+                                String(cargo.id) ===
+                                String(
+                                    initialCargo
+                                )
+                            ) {
+
+                                option.selected =
+                                    true;
+                            }
+
+
+                            cargoTypeSelect.appendChild(
+                                option
+                            );
+                        }
+                    );
+
+
+                    cargoTypeHelp.textContent =
+                        subclientSelect.value ?
+                        'Cargas habilitadas para cliente y subcliente.' :
+                        'Cargas habilitadas para el cliente.';
+
+
+                } catch (error) {
+
+                    cargoTypeSelect.innerHTML =
+                        '<option value="">Error al cargar</option>';
+
+                } finally {
+
+                    cargoTypeSelect.disabled =
+                        false;
+                }
             }
-        }
 
 
-        function filterClientData() {
+            /*
+            |--------------------------------------------------------------------------
+            | ORIGEN / DESTINO
+            |--------------------------------------------------------------------------
+            */
 
-            filterByClient(
-                subclientSelect
-            );
+            function toggleOrigin() {
+                const plant =
+                    originType.value ===
+                    'PLANT';
 
-            filterByClient(
-                plantSelect
-            );
-
-            filterByClient(
-                originPlant
-            );
-
-            filterByClient(
-                destinationPlant
-            );
-        }
-
-
-        function toggleOrigin() {
-
-            if (
-                originType.value === 'PLANT'
-            ) {
 
                 originPlantGroup.style.display =
-                    '';
+                    plant ? '' : 'none';
+
 
                 originLocationGroup.style.display =
-                    'none';
-
-            } else {
-
-                originPlantGroup.style.display =
-                    'none';
-
-                originLocationGroup.style.display =
-                    '';
+                    plant ? 'none' : '';
             }
-        }
 
 
-        function toggleDestination() {
+            function toggleDestination() {
+                const plant =
+                    destinationType.value ===
+                    'PLANT';
 
-            if (
-                destinationType.value ===
-                'PLANT'
-            ) {
 
                 destinationPlantGroup.style.display =
-                    '';
+                    plant ? '' : 'none';
+
 
                 destinationLocationGroup.style.display =
-                    'none';
-
-            } else {
-
-                destinationPlantGroup.style.display =
-                    'none';
-
-                destinationLocationGroup.style.display =
-                    '';
+                    plant ? 'none' : '';
             }
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | EVENTOS
+            |--------------------------------------------------------------------------
+            */
+
+            clientSelect.addEventListener(
+                'change',
+                function() {
+
+                    subclientSelect.value =
+                        '';
+
+                    filterClientData();
+
+                    loadCargoTypes(false);
+
+                    refreshStandbyRule();
+                }
+            );
+
+
+            subclientSelect.addEventListener(
+                'change',
+                function() {
+
+                    loadCargoTypes(false);
+
+                    refreshStandbyRule();
+                }
+            );
+
+
+            standbyProcess.addEventListener(
+                'change',
+                refreshStandbyRule
+            );
+
+
+            operationType.addEventListener(
+                'change',
+                suggestStandbyProcess
+            );
+
+
+            overrideCheck.addEventListener(
+                'change',
+                toggleOverride
+            );
+
+
+            originType.addEventListener(
+                'change',
+                toggleOrigin
+            );
+
+
+            destinationType.addEventListener(
+                'change',
+                toggleDestination
+            );
+
+
+            /*
+            |--------------------------------------------------------------------------
+            | INICIAR
+            |--------------------------------------------------------------------------
+            */
+
+            filterClientData();
+
+            toggleOrigin();
+
+            toggleDestination();
+
+            toggleOverride();
+
+            refreshStandbyRule();
+
+            loadCargoTypes(true);
         }
-
-
-        clientSelect.addEventListener(
-            'change',
-            filterClientData
-        );
-
-        originType.addEventListener(
-            'change',
-            toggleOrigin
-        );
-
-        destinationType.addEventListener(
-            'change',
-            toggleDestination
-        );
-
-
-        filterClientData();
-
-        toggleOrigin();
-
-        toggleDestination();
-
-    });
+    );
 </script>

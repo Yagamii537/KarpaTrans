@@ -21,22 +21,41 @@ use Illuminate\View\View;
 
 class TripController extends Controller
 {
+    /*
+    |--------------------------------------------------------------------------
+    | LISTADO
+    |--------------------------------------------------------------------------
+    */
+
     public function index(Request $request): View
     {
-        $search =
-            trim((string) $request->get('search'));
+        $search = trim(
+            (string) $request->get('search')
+        );
 
-        $status =
-            $request->get('status');
+        $status = $request->get('status');
 
         $trips = Trip::query()
+
             ->with([
                 'workOrder',
+
                 'activeAssignment.driver',
                 'activeAssignment.vehicle',
                 'activeAssignment.chassis',
                 'activeAssignment.container',
+
+                /*
+                 * Necesitamos también el historial
+                 * para mostrar recursos utilizados
+                 * cuando el viaje ya terminó.
+                 */
+                'assignments.driver',
+                'assignments.vehicle',
+                'assignments.chassis',
+                'assignments.container',
             ])
+
             ->when(
                 $search !== '',
                 function ($query) use ($search) {
@@ -50,13 +69,21 @@ class TripController extends Controller
                                     'like',
                                     "%{$search}%"
                                 )
+
                                 ->orWhere(
                                     'booking_number',
                                     'like',
                                     "%{$search}%"
                                 )
+
                                 ->orWhere(
                                     'client_name_snapshot',
+                                    'like',
+                                    "%{$search}%"
+                                )
+
+                                ->orWhere(
+                                    'subclient_name_snapshot',
                                     'like',
                                     "%{$search}%"
                                 );
@@ -64,6 +91,7 @@ class TripController extends Controller
                     );
                 }
             )
+
             ->when(
                 $status,
                 fn($query) =>
@@ -72,9 +100,27 @@ class TripController extends Controller
                     $status
                 )
             )
-            ->orderByDesc('scheduled_start_at')
+
+            ->orderByDesc(
+                'scheduled_start_at'
+            )
+
+            ->orderBy(
+                'work_order_id'
+            )
+
+            ->orderBy(
+                'service_number'
+            )
+
+            ->orderBy(
+                'sequence_number'
+            )
+
             ->paginate(15)
+
             ->withQueryString();
+
 
         return view(
             'trips.index',
@@ -86,19 +132,24 @@ class TripController extends Controller
         );
     }
 
+
     /*
-     |--------------------------------------------------------------------------
-     | CREAR MANUALMENTE DESDE UNA ORDEN
-     |--------------------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | CREACIÓN MANUAL
+    |--------------------------------------------------------------------------
+    */
 
     public function create(Request $request): View
     {
         $workOrderId =
-            $request->get('work_order_id');
+            $request->get(
+                'work_order_id'
+            );
+
 
         $workOrders =
             WorkOrder::query()
+
             ->with([
                 'client',
                 'subclient',
@@ -108,21 +159,30 @@ class TripController extends Controller
                 'destinationLocation',
                 'destinationPlant',
             ])
+
             ->whereNotIn(
                 'status',
-                ['COMPLETED', 'CANCELLED']
+                [
+                    'COMPLETED',
+                    'CANCELLED',
+                ]
             )
+
             ->orderByDesc('id')
+
             ->get();
+
 
         $selectedWorkOrder =
             $workOrderId
-            ? $workOrders
-            ->firstWhere(
+
+            ? $workOrders->firstWhere(
                 'id',
                 $workOrderId
             )
+
             : null;
+
 
         return view(
             'trips.create',
@@ -133,10 +193,9 @@ class TripController extends Controller
         );
     }
 
-    public function store(
-        Request $request
-    ): RedirectResponse {
 
+    public function store(Request $request): RedirectResponse
+    {
         $validated =
             $request->validate([
 
@@ -163,6 +222,7 @@ class TripController extends Controller
                 ],
             ]);
 
+
         $workOrder =
             WorkOrder::with([
                 'client',
@@ -173,19 +233,57 @@ class TripController extends Controller
                 'destinationLocation',
                 'destinationPlant',
             ])
+
             ->findOrFail(
                 $validated['work_order_id']
             );
 
-        $trip =
-            $this->createTripFromWorkOrder(
-                $workOrder,
-                $validated['scheduled_start_at'],
-                $validated['scheduled_end_at']
-                    ?? null,
-                $validated['notes']
-                    ?? null
+
+        $serviceNumber =
+            (
+                $workOrder
+                ->trips()
+                ->max(
+                    'service_number'
+                )
+                ?? 0
+            ) + 1;
+
+
+        $stage =
+            $this->defaultStage(
+                $workOrder
+                    ->service_modality
             );
+
+
+        $trip =
+            DB::transaction(
+                function () use (
+                    $workOrder,
+                    $validated,
+                    $serviceNumber,
+                    $stage
+                ) {
+
+                    return $this
+                        ->createTripFromWorkOrder(
+
+                            $workOrder,
+
+                            $serviceNumber,
+
+                            $stage,
+
+                            $validated['scheduled_start_at'],
+
+                            $validated['scheduled_end_at'] ?? null,
+
+                            $validated['notes'] ?? null
+                        );
+                }
+            );
+
 
         return redirect()
             ->route(
@@ -198,84 +296,178 @@ class TripController extends Controller
             );
     }
 
+
     /*
-     |--------------------------------------------------------------------------
-     | GENERAR VIAJES FALTANTES DESDE OT
-     |--------------------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | GENERAR DESDE OT
+    |--------------------------------------------------------------------------
+    */
 
     public function generateFromWorkOrder(
         WorkOrder $workOrder
     ): RedirectResponse {
 
+        if (
+            in_array(
+                $workOrder->status,
+                [
+                    'COMPLETED',
+                    'CANCELLED',
+                ]
+            )
+        ) {
+
+            return back()
+                ->withErrors([
+
+                    'trips' =>
+                    'No se pueden generar viajes para una orden completada o cancelada.',
+
+                ]);
+        }
+
+
         $workOrder->load([
+
             'client',
             'subclient',
             'cargoType',
+
             'originLocation',
             'originPlant',
+
             'destinationLocation',
             'destinationPlant',
+
             'trips',
         ]);
 
-        $alreadyCreated =
-            $workOrder->trips()->count();
 
-        $remaining =
-            max(
-                0,
-                $workOrder->requested_trips
-                    - $alreadyCreated
-            );
+        if (
+            empty($workOrder
+                ->service_modality)
+        ) {
 
-        if ($remaining === 0) {
+            return back()
+                ->withErrors([
 
-            return back()->with(
-                'warning',
-                'Todos los viajes solicitados ya fueron generados.'
-            );
+                    'trips' =>
+                    'La Orden de Trabajo no tiene modalidad de servicio definida.',
+
+                ]);
         }
+
+
+        $createdTrips = 0;
+
 
         DB::transaction(
             function () use (
                 $workOrder,
-                $remaining,
-                $alreadyCreated
+                &$createdTrips
             ) {
 
                 for (
-                    $i = 1;
-                    $i <= $remaining;
-                    $i++
+                    $serviceNumber = 1;
+                    $serviceNumber
+                        <= $workOrder->requested_trips;
+                    $serviceNumber++
                 ) {
 
-                    /*
-                     * Inicialmente tomamos fecha/hora
-                     * solicitada de la OT.
-                     */
-                    $date =
-                        $workOrder
-                        ->requested_date
-                        ->format('Y-m-d');
+                    $requiredStages =
+                        $this->stagesForModality(
+                            $workOrder
+                                ->service_modality
+                        );
 
-                    $time =
-                        $workOrder->requested_time
-                        ?: '00:00';
 
-                    $scheduledStart =
-                        "{$date} {$time}";
+                    foreach (
+                        $requiredStages
+                        as $stage
+                    ) {
 
-                    $this->createTripFromWorkOrder(
-                        $workOrder,
-                        $scheduledStart,
-                        null,
-                        null,
-                        $alreadyCreated + $i
-                    );
+                        $exists =
+                            $workOrder
+                            ->trips()
+
+                            ->where(
+                                'service_number',
+                                $serviceNumber
+                            )
+
+                            ->where(
+                                'service_stage',
+                                $stage
+                            )
+
+                            ->exists();
+
+
+                        if ($exists) {
+                            continue;
+                        }
+
+
+                        $scheduledStart =
+                            $this
+                            ->buildScheduledStart(
+                                $workOrder
+                            );
+
+
+                        $this
+                            ->createTripFromWorkOrder(
+
+                                $workOrder,
+
+                                $serviceNumber,
+
+                                $stage,
+
+                                $scheduledStart,
+
+                                null,
+
+                                null
+                            );
+
+
+                        $createdTrips++;
+                    }
                 }
             }
         );
+
+
+        if (
+            $createdTrips === 0
+        ) {
+
+            return back()
+                ->with(
+                    'warning',
+
+                    'Todos los servicios y etapas de esta orden ya fueron generados.'
+                );
+        }
+
+
+        if (
+            $workOrder->status
+            === 'PENDING'
+        ) {
+
+            $workOrder->update([
+
+                'status' =>
+                'PLANNED',
+
+                'updated_by' =>
+                Auth::id(),
+
+            ]);
+        }
+
 
         return redirect()
             ->route(
@@ -284,119 +476,342 @@ class TripController extends Controller
             )
             ->with(
                 'success',
-                "{$remaining} viaje(s) generado(s) correctamente."
+
+                "{$createdTrips} viaje(s) / etapa(s) generado(s) correctamente."
             );
     }
 
-    public function show(Trip $trip): View
-    {
+
+    /*
+    |--------------------------------------------------------------------------
+    | DETALLE
+    |--------------------------------------------------------------------------
+    */
+
+    public function show(
+        Trip $trip
+    ): View {
+
         $trip->load([
+
             'workOrder',
+
+            'standbyCalculation',
+
             'assignments.driver',
+
             'assignments.vehicle',
+
             'assignments.chassis',
+
             'assignments.container',
+
             'assignments.assignedBy',
+
             'assignments.releasedBy',
+
             'statusHistory.user',
 
             'activeAssignment.driver',
+
             'activeAssignment.vehicle',
+
             'activeAssignment.chassis',
+
             'activeAssignment.container',
 
+            'activeAssignment.assignedBy',
+
             'times.location',
+
             'times.plant',
+
             'times.creator',
+
+
         ]);
+
+
+        /*
+         * Etapa de Posición relacionada
+         * con este Retiro.
+         */
+        $positioningTrip =
+            $this->findPositioningStage(
+                $trip
+            );
+
+
+        /*
+         * RETIRO se habilita solamente
+         * cuando Posición terminó.
+         */
+        $stageUnlocked =
+            $this->isStageUnlocked(
+                $trip
+            );
+
+
+        /*
+         * Asignación que mostramos.
+         *
+         * Si está completado ya no existe
+         * activeAssignment, por eso usamos
+         * la última histórica.
+         */
+        $displayAssignment =
+            $trip->activeAssignment
+            ??
+            $trip
+            ->assignments
+            ->sortByDesc(
+                'assigned_at'
+            )
+            ->first();
+
 
         $drivers =
             Driver::query()
-            ->where('is_active', true)
-            ->orderBy('last_names')
+
+            ->where(
+                'is_active',
+                true
+            )
+
+            ->orderBy(
+                'last_names'
+            )
+
+            ->orderBy(
+                'first_names'
+            )
+
             ->get();
+
 
         $vehicles =
             Vehicle::query()
-            ->where('is_active', true)
-            ->whereIn(
-                'operational_status',
-                [
-                    'AVAILABLE',
-                    'ASSIGNED',
-                ]
+
+            ->where(
+                'is_active',
+                true
             )
+
             ->orderBy('plate')
+
             ->get();
+
 
         $chassisList =
             Chassis::query()
-            ->where('is_active', true)
-            ->whereIn(
-                'operational_status',
-                [
-                    'AVAILABLE',
-                    'ASSIGNED',
-                ]
+
+            ->where(
+                'is_active',
+                true
             )
+
             ->orderBy('code')
+
             ->get();
+
 
         $containers =
             Container::query()
-            ->where('is_active', true)
-            ->whereNotIn(
-                'operational_status',
-                [
-                    'MAINTENANCE',
-                    'OUT_OF_SERVICE',
-                ]
+
+            ->where(
+                'is_active',
+                true
             )
-            ->orderBy('container_number')
+
+            ->orderBy(
+                'container_number'
+            )
+
             ->get();
+
 
         $locations =
             \App\Models\Location::query()
-            ->where('is_active', true)
+
+            ->where(
+                'is_active',
+                true
+            )
+
             ->orderBy('name')
+
             ->get();
+
 
         $plants =
             \App\Models\Plant::query()
-            ->where('is_active', true)
+
+            ->where(
+                'is_active',
+                true
+            )
+
+            ->with('client')
+
             ->orderBy('name')
+
             ->get();
+
+
+        /*
+         * Si estamos en RETIRO,
+         * sugerimos el contenedor
+         * usado en POSICIÓN.
+         */
+        $suggestedContainer =
+            null;
+
+
+        if (
+            $trip->service_stage
+            === 'PICKUP'
+
+            &&
+            $trip->service_number
+        ) {
+
+            $suggestedContainerId =
+                TripAssignment::query()
+
+                ->whereHas(
+                    'trip',
+
+                    function ($query) use ($trip) {
+
+                        $query
+                            ->where(
+                                'work_order_id',
+                                $trip->work_order_id
+                            )
+
+                            ->where(
+                                'service_number',
+                                $trip->service_number
+                            )
+
+                            ->where(
+                                'service_stage',
+                                'POSITIONING'
+                            );
+                    }
+                )
+
+                ->whereNotNull(
+                    'container_id'
+                )
+
+                ->orderByDesc(
+                    'assigned_at'
+                )
+
+                ->value(
+                    'container_id'
+                );
+
+
+            if ($suggestedContainerId) {
+
+                $suggestedContainer =
+                    $containers
+                    ->firstWhere(
+                        'id',
+                        $suggestedContainerId
+                    );
+            }
+        }
+
+
+        $availableEvents =
+            $stageUnlocked
+            ? $trip->availableEventOptions()
+            : [];
+
+
+        $eventSequenceHelp =
+            $trip->eventSequenceHelp();
+
 
         return view(
             'trips.show',
+
             compact(
+
                 'trip',
+
                 'drivers',
+
                 'vehicles',
+
                 'chassisList',
+
                 'containers',
+
                 'locations',
-                'plants'
+
+                'plants',
+
+                'suggestedContainer',
+
+                'availableEvents',
+
+                'eventSequenceHelp',
+
+                'positioningTrip',
+
+                'stageUnlocked',
+
+                'displayAssignment'
             )
         );
     }
 
+
     /*
-     * En esta etapa la planificación principal
-     * viene heredada de la OT.
-     */
-    public function edit(Trip $trip): View
-    {
+    |--------------------------------------------------------------------------
+    | EDITAR PLANIFICACIÓN
+    |--------------------------------------------------------------------------
+    */
+
+    public function edit(
+        Trip $trip
+    ): View {
+
         return view(
             'trips.edit',
             compact('trip')
         );
     }
 
+
     public function update(
         Request $request,
         Trip $trip
     ): RedirectResponse {
+
+        if (
+            in_array(
+                $trip->status,
+                [
+                    'COMPLETED',
+                    'CANCELLED',
+                ]
+            )
+        ) {
+
+            return back()
+                ->withErrors([
+
+                    'trip' =>
+                    'No se puede modificar la planificación de un viaje finalizado.',
+
+                ]);
+        }
+
 
         $validated =
             $request->validate([
@@ -419,10 +834,15 @@ class TripController extends Controller
                 ],
             ]);
 
+
         $validated['updated_by'] =
             Auth::id();
 
-        $trip->update($validated);
+
+        $trip->update(
+            $validated
+        );
+
 
         return redirect()
             ->route(
@@ -431,9 +851,17 @@ class TripController extends Controller
             )
             ->with(
                 'success',
-                'Planificación del viaje actualizada.'
+
+                'Planificación actualizada correctamente.'
             );
     }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ELIMINAR
+    |--------------------------------------------------------------------------
+    */
 
     public function destroy(
         Trip $trip
@@ -442,59 +870,136 @@ class TripController extends Controller
         if (
             !in_array(
                 $trip->status,
-                ['PENDING', 'CANCELLED']
+                [
+                    'PENDING',
+                    'CANCELLED',
+                ]
             )
         ) {
 
-            return back()->withErrors([
-                'delete' =>
-                'Solo se pueden eliminar viajes pendientes o cancelados.',
-            ]);
+            return back()
+                ->withErrors([
+
+                    'delete' =>
+                    'Solo se pueden eliminar viajes pendientes o cancelados.',
+
+                ]);
         }
+
 
         if (
-            $trip->assignments()->exists()
+            $trip
+            ->assignments()
+            ->exists()
+
+            ||
+
+            $trip
+            ->times()
+            ->exists()
         ) {
 
-            return back()->withErrors([
-                'delete' =>
-                'El viaje ya posee historial de asignaciones y no puede eliminarse.',
-            ]);
+            return back()
+                ->withErrors([
+
+                    'delete' =>
+                    'El viaje ya posee información operativa y no puede eliminarse.',
+
+                ]);
         }
+
 
         $trip->delete();
 
+
         return redirect()
-            ->route('trips.index')
+            ->route(
+                'trips.index'
+            )
             ->with(
                 'success',
                 'Viaje eliminado correctamente.'
             );
     }
 
+
     /*
-     |--------------------------------------------------------------------------
-     | ASIGNAR RECURSOS
-     |--------------------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | ASIGNACIÓN
+    |--------------------------------------------------------------------------
+    */
 
     public function assign(
         Request $request,
         Trip $trip
     ): RedirectResponse {
 
+        /*
+         * PRIMERO:
+         * validar estado final.
+         */
         if (
             in_array(
                 $trip->status,
-                ['COMPLETED', 'CANCELLED']
+                [
+                    'COMPLETED',
+                    'CANCELLED',
+                ]
             )
         ) {
 
-            return back()->withErrors([
+            return back()
+                ->withErrors([
+
+                    'assignment' =>
+                    'No se pueden asignar recursos a un viaje finalizado o cancelado.',
+
+                ]);
+        }
+
+
+        /*
+         * SEGUNDO:
+         * RETIRO no puede comenzar
+         * sin completar POSICIÓN.
+         */
+        if (
+            !$this->isStageUnlocked(
+                $trip
+            )
+        ) {
+
+            $positioning =
+                $this
+                ->findPositioningStage(
+                    $trip
+                );
+
+
+            throw ValidationException::withMessages([
+
                 'assignment' =>
-                'No se pueden asignar recursos a un viaje finalizado o cancelado.',
+
+                'No se puede asignar la etapa de Retiro todavía. '
+
+                    . 'Primero debe completarse la etapa de Posición '
+
+                    . 'del Servicio #'
+
+                    . $trip->service_number
+
+                    . (
+
+                        $positioning
+
+                        ? ' (' . $positioning->trip_number . ').'
+
+                        : '.'
+                    ),
+
             ]);
         }
+
 
         $validated =
             $request->validate([
@@ -526,43 +1031,232 @@ class TripController extends Controller
                 ],
             ]);
 
+
+        $trip->load([
+            'workOrder',
+            'activeAssignment',
+        ]);
+
+
+        /*
+         * RETIRO reutiliza contenedor
+         * de POSICIÓN si no seleccionan otro.
+         */
+        if (
+            empty($validated['container_id'])
+
+            &&
+            $trip->service_stage
+            === 'PICKUP'
+
+            &&
+            $trip->service_number
+        ) {
+
+            $positioningContainerId =
+                TripAssignment::query()
+
+                ->whereHas(
+                    'trip',
+
+                    function ($query) use ($trip) {
+
+                        $query
+                            ->where(
+                                'work_order_id',
+                                $trip->work_order_id
+                            )
+
+                            ->where(
+                                'service_number',
+                                $trip->service_number
+                            )
+
+                            ->where(
+                                'service_stage',
+                                'POSITIONING'
+                            );
+                    }
+                )
+
+                ->whereNotNull(
+                    'container_id'
+                )
+
+                ->orderByDesc(
+                    'assigned_at'
+                )
+
+                ->value(
+                    'container_id'
+                );
+
+
+            if ($positioningContainerId) {
+
+                $validated['container_id'] =
+                    $positioningContainerId;
+            }
+        }
+
+
         $driver =
             Driver::findOrFail(
                 $validated['driver_id']
             );
+
 
         $vehicle =
             Vehicle::findOrFail(
                 $validated['vehicle_id']
             );
 
+
         $chassis =
             !empty($validated['chassis_id'])
+
             ? Chassis::findOrFail(
                 $validated['chassis_id']
             )
+
             : null;
+
 
         $container =
             !empty($validated['container_id'])
+
             ? Container::findOrFail(
                 $validated['container_id']
             )
+
             : null;
 
+
+        $warnings = [];
+
+
         /*
-         * RECURSOS ACTIVOS
-         */
+        |--------------------------------------------------------------------------
+        | CONDUCTOR
+        |--------------------------------------------------------------------------
+        */
+
         if (!$driver->is_active) {
+
             throw ValidationException::withMessages([
+
                 'driver_id' =>
                 'El conductor seleccionado está inactivo.',
+
             ]);
         }
 
+
         if (
-            !$vehicle->is_active
-            ||
+            $driver->license_status
+            === 'expired'
+        ) {
+
+            $warnings[] =
+                'La licencia del conductor está vencida.';
+        } elseif (
+            $driver->license_status
+            === 'expiring'
+        ) {
+
+            $warnings[] =
+                'La licencia del conductor está próxima a vencer.';
+        }
+
+
+        $driverBusy =
+            TripAssignment::query()
+
+            ->where(
+                'driver_id',
+                $driver->id
+            )
+
+            ->whereNull(
+                'unassigned_at'
+            )
+
+            ->where(
+                'trip_id',
+                '!=',
+                $trip->id
+            )
+
+            ->exists();
+
+
+        if ($driverBusy) {
+
+            throw ValidationException::withMessages([
+
+                'driver_id' =>
+                'El conductor ya tiene una asignación activa en otro viaje.',
+
+            ]);
+        }
+
+
+        $restrictionResult =
+            $this
+            ->checkDriverRestrictions(
+                $trip,
+                $driver
+            );
+
+
+        if (
+            !empty($restrictionResult['blocks'])
+        ) {
+
+            throw ValidationException::withMessages([
+
+                'driver_id' =>
+                implode(
+                    ' | ',
+                    $restrictionResult['blocks']
+                ),
+
+            ]);
+        }
+
+
+        if (
+            !empty($restrictionResult['warnings'])
+        ) {
+
+            $warnings =
+                array_merge(
+
+                    $warnings,
+
+                    $restrictionResult['warnings']
+                );
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | VEHÍCULO
+        |--------------------------------------------------------------------------
+        */
+
+        if (!$vehicle->is_active) {
+
+            throw ValidationException::withMessages([
+
+                'vehicle_id' =>
+                'El vehículo seleccionado está inactivo.',
+
+            ]);
+        }
+
+
+        if (
             in_array(
                 $vehicle->operational_status,
                 [
@@ -573,194 +1267,464 @@ class TripController extends Controller
         ) {
 
             throw ValidationException::withMessages([
+
                 'vehicle_id' =>
-                'El vehículo no está disponible para operación.',
+                'El vehículo no se encuentra disponible para operación.',
+
             ]);
         }
 
+
+        $vehicleBusy =
+            TripAssignment::query()
+
+            ->where(
+                'vehicle_id',
+                $vehicle->id
+            )
+
+            ->whereNull(
+                'unassigned_at'
+            )
+
+            ->where(
+                'trip_id',
+                '!=',
+                $trip->id
+            )
+
+            ->exists();
+
+
+        if ($vehicleBusy) {
+
+            throw ValidationException::withMessages([
+
+                'vehicle_id' =>
+                'El vehículo ya tiene una asignación activa en otro viaje.',
+
+            ]);
+        }
+
+
+        $estimatedWeight =
+            $trip
+            ->workOrder
+            ?->estimated_weight_kg;
+
+
         if (
-            $chassis
+            $estimatedWeight
+
             &&
-            (
-                !$chassis->is_active
-                ||
+            $vehicle
+            ->max_load_capacity_kg
+
+            &&
+            (float) $estimatedWeight
+
+            >
+            (float) $vehicle
+                ->max_load_capacity_kg
+        ) {
+
+            throw ValidationException::withMessages([
+
+                'vehicle_id' =>
+
+                'El vehículo no tiene capacidad suficiente. '
+
+                    . 'La OT requiere aproximadamente '
+
+                    . number_format(
+                        (float) $estimatedWeight,
+                        2
+                    )
+
+                    . ' kg y el vehículo admite '
+
+                    . number_format(
+                        (float) $vehicle
+                            ->max_load_capacity_kg,
+                        2
+                    )
+
+                    . ' kg.',
+
+            ]);
+        }
+
+
+        if (
+            $vehicle
+            ->has_expired_document
+        ) {
+
+            $warnings[] =
+                'El vehículo tiene uno o más documentos vencidos.';
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | CONTENEDOR
+        |--------------------------------------------------------------------------
+        */
+
+        if ($container) {
+
+            if (!$container->is_active) {
+
+                throw ValidationException::withMessages([
+
+                    'container_id' =>
+                    'El contenedor seleccionado está inactivo.',
+
+                ]);
+            }
+
+
+            if (
                 in_array(
-                    $chassis->operational_status,
+                    $container
+                        ->operational_status,
+
                     [
                         'MAINTENANCE',
                         'OUT_OF_SERVICE',
                     ]
                 )
-            )
-        ) {
+            ) {
 
-            throw ValidationException::withMessages([
-                'chassis_id' =>
-                'El chasis no está disponible para operación.',
-            ]);
+                throw ValidationException::withMessages([
+
+                    'container_id' =>
+                    'El contenedor no se encuentra disponible para operación.',
+
+                ]);
+            }
+
+
+            $requestedType =
+                $trip
+                ->workOrder
+                ?->requested_container_type;
+
+
+            $requestedSize =
+                $trip
+                ->workOrder
+                ?->requested_container_size;
+
+
+            if (
+                $requestedType
+
+                &&
+                $container
+                ->container_type
+                !== $requestedType
+            ) {
+
+                throw ValidationException::withMessages([
+
+                    'container_id' =>
+
+                    'El contenedor no coincide con el tipo requerido por la OT. '
+
+                        . 'Requerido: '
+
+                        . $requestedType
+
+                        . '. Seleccionado: '
+
+                        . $container
+                        ->container_type
+
+                        . '.',
+
+                ]);
+            }
+
+
+            if (
+                $requestedSize
+
+                &&
+                $container
+                ->container_size
+                !== $requestedSize
+            ) {
+
+                throw ValidationException::withMessages([
+
+                    'container_id' =>
+
+                    'El contenedor no coincide con el tamaño requerido por la OT. '
+
+                        . 'Requerido: '
+
+                        . $requestedSize
+
+                        . '. Seleccionado: '
+
+                        . $container
+                        ->container_size
+
+                        . '.',
+
+                ]);
+            }
+
+
+            /*
+             * Puede existir en la etapa hermana
+             * del mismo servicio.
+             */
+            $containerBusyElsewhere =
+                TripAssignment::query()
+
+                ->where(
+                    'container_id',
+                    $container->id
+                )
+
+                ->whereNull(
+                    'unassigned_at'
+                )
+
+                ->where(
+                    'trip_id',
+                    '!=',
+                    $trip->id
+                )
+
+                ->whereHas(
+                    'trip',
+
+                    function ($query) use ($trip) {
+
+                        $query
+                            ->where(
+                                function ($scope) use ($trip) {
+
+                                    $scope
+                                        ->where(
+                                            'work_order_id',
+                                            '!=',
+                                            $trip->work_order_id
+                                        )
+
+                                        ->orWhere(
+                                            'service_number',
+                                            '!=',
+                                            $trip->service_number
+                                        )
+
+                                        ->orWhereNull(
+                                            'service_number'
+                                        );
+                                }
+                            );
+                    }
+                )
+
+                ->exists();
+
+
+            if ($containerBusyElsewhere) {
+
+                throw ValidationException::withMessages([
+
+                    'container_id' =>
+                    'El contenedor ya está asignado a otro servicio activo.',
+
+                ]);
+            }
         }
 
-        if (
-            $container
-            &&
-            (
-                !$container->is_active
-                ||
+
+        /*
+        |--------------------------------------------------------------------------
+        | CHASIS
+        |--------------------------------------------------------------------------
+        */
+
+        if ($chassis) {
+
+            if (!$chassis->is_active) {
+
+                throw ValidationException::withMessages([
+
+                    'chassis_id' =>
+                    'El chasis seleccionado está inactivo.',
+
+                ]);
+            }
+
+
+            if (
                 in_array(
-                    $container->operational_status,
+                    $chassis
+                        ->operational_status,
+
                     [
                         'MAINTENANCE',
                         'OUT_OF_SERVICE',
                     ]
                 )
-            )
-        ) {
-
-            throw ValidationException::withMessages([
-                'container_id' =>
-                'El contenedor no está disponible para operación.',
-            ]);
-        }
-
-        /*
-         * RN-15:
-         * Restricciones del conductor.
-         */
-        $restrictionResult =
-            $this->checkDriverRestrictions(
-                $trip,
-                $driver
-            );
-
-        if (
-            !empty($restrictionResult['blocks'])
-        ) {
-
-            throw ValidationException::withMessages([
-                'driver_id' =>
-                implode(
-                    ' | ',
-                    $restrictionResult['blocks']
-                ),
-            ]);
-        }
-
-        /*
-         * COMPATIBILIDAD CHASIS / CONTENEDOR
-         */
-        if ($chassis && $container) {
-
-            if (
-                $container->container_size === '20FT'
-                &&
-                !$chassis->supports_20ft
             ) {
 
                 throw ValidationException::withMessages([
+
                     'chassis_id' =>
-                    'El chasis seleccionado no admite contenedores de 20 pies.',
+                    'El chasis no se encuentra disponible para operación.',
+
                 ]);
             }
 
-            if (
-                in_array(
-                    $container->container_size,
-                    [
-                        '40FT',
-                        '40HC',
-                    ]
+
+            $chassisBusy =
+                TripAssignment::query()
+
+                ->where(
+                    'chassis_id',
+                    $chassis->id
                 )
-                &&
-                !$chassis->supports_40ft
-            ) {
+
+                ->whereNull(
+                    'unassigned_at'
+                )
+
+                ->where(
+                    'trip_id',
+                    '!=',
+                    $trip->id
+                )
+
+                ->exists();
+
+
+            if ($chassisBusy) {
 
                 throw ValidationException::withMessages([
+
                     'chassis_id' =>
-                    'El chasis seleccionado no admite contenedores de 40 pies.',
+                    'El chasis ya tiene una asignación activa en otro viaje.',
+
                 ]);
             }
+
 
             if (
-                $container->container_type === 'REEFER'
-                &&
-                !$chassis->supports_reefer
+                $chassis
+                ->has_expired_document
             ) {
 
-                throw ValidationException::withMessages([
-                    'chassis_id' =>
-                    'El chasis seleccionado no está habilitado para contenedores refrigerados.',
-                ]);
+                $warnings[] =
+                    'El chasis tiene uno o más documentos vencidos.';
             }
-        }
 
-        /*
-         * PESO
-         */
-        if (
-            $container
-            &&
-            $vehicle->max_weight_kg
-            &&
-            $container->max_gross_weight_kg
-            &&
-            (
-                (float)
-                $container->max_gross_weight_kg
+
+            if ($container) {
+
+                if (
+                    $container->container_size
+                    === '20FT'
+
+                    &&
+                    !$chassis
+                        ->supports_20ft
+                ) {
+
+                    throw ValidationException::withMessages([
+
+                        'chassis_id' =>
+                        'El chasis no es compatible con contenedores de 20 pies.',
+
+                    ]);
+                }
+
+
+                if (
+                    in_array(
+                        $container
+                            ->container_size,
+
+                        [
+                            '40FT',
+                            '40HC',
+                        ]
+                    )
+
+                    &&
+                    !$chassis
+                        ->supports_40ft
+                ) {
+
+                    throw ValidationException::withMessages([
+
+                        'chassis_id' =>
+                        'El chasis no es compatible con contenedores de 40 pies.',
+
+                    ]);
+                }
+
+
+                if (
+                    $container
+                    ->container_type
+                    === 'REEFER'
+
+                    &&
+                    !$chassis
+                        ->supports_reefer
+                ) {
+
+                    throw ValidationException::withMessages([
+
+                        'chassis_id' =>
+                        'El chasis no está habilitado para contenedores refrigerados.',
+
+                    ]);
+                }
+            }
+
+
+            if (
+                $estimatedWeight
+
+                &&
+                $chassis
+                ->maximum_capacity_tons
+
+                &&
+                (
+                    (float) $estimatedWeight
+                    /
+                    1000
+                )
+
                 >
-                (float)
-                $vehicle->max_weight_kg
-            )
-        ) {
+                (float) $chassis
+                    ->maximum_capacity_tons
+            ) {
 
-            throw ValidationException::withMessages([
-                'vehicle_id' =>
-                'El peso bruto máximo del contenedor supera el peso máximo configurado para el vehículo.',
-            ]);
+                throw ValidationException::withMessages([
+
+                    'chassis_id' =>
+                    'El chasis no tiene capacidad suficiente para el peso estimado de la OT.',
+
+                ]);
+            }
         }
 
-        $warnings = [];
 
         /*
-         * DOCUMENTOS.
-         * La política final de bloqueo todavía
-         * está pendiente de confirmación,
-         * por eso actualmente ADVERTIMOS.
-         */
-        if (
-            $driver->license_expiration_date
-            &&
-            $driver
-            ->license_expiration_date
-            ->isPast()
-        ) {
-
-            $warnings[] =
-                'La licencia del conductor está vencida.';
-        }
-
-        if ($vehicle->has_expired_document) {
-
-            $warnings[] =
-                'El vehículo posee documentación vencida.';
-        }
-
-        if (
-            $chassis
-            &&
-            $chassis->has_expired_document
-        ) {
-
-            $warnings[] =
-                'El chasis posee documentación vencida.';
-        }
-
-        foreach (
-            $restrictionResult['warnings']
-            as $warning
-        ) {
-
-            $warnings[] = $warning;
-        }
+        |--------------------------------------------------------------------------
+        | GUARDAR
+        |--------------------------------------------------------------------------
+        */
 
         DB::transaction(
             function () use (
@@ -768,32 +1732,38 @@ class TripController extends Controller
                 $validated
             ) {
 
-                /*
-                 * Cerramos asignación anterior.
-                 */
                 $current =
                     $trip
                     ->assignments()
+
                     ->whereNull(
                         'unassigned_at'
                     )
+
                     ->first();
+
 
                 if ($current) {
 
                     $current->update([
+
                         'unassigned_at' =>
                         now(),
 
                         'release_reason' =>
-                        'Reasignación de recursos.',
+                        $validated['assignment_reason']
+
+                            ?: 'Reasignación de recursos.',
 
                         'released_by' =>
                         Auth::id(),
+
                     ]);
                 }
 
+
                 TripAssignment::create([
+
                     'trip_id' =>
                     $trip->id,
 
@@ -804,12 +1774,10 @@ class TripController extends Controller
                     $validated['vehicle_id'],
 
                     'chassis_id' =>
-                    $validated['chassis_id']
-                        ?? null,
+                    $validated['chassis_id'] ?? null,
 
                     'container_id' =>
-                    $validated['container_id']
-                        ?? null,
+                    $validated['container_id'] ?? null,
 
                     'assigned_at' =>
                     now(),
@@ -819,100 +1787,171 @@ class TripController extends Controller
 
                     'assigned_by' =>
                     Auth::id(),
+
                 ]);
 
-                /*
-                 * Primer cambio a ASIGNADO.
-                 */
+
                 if (
                     $trip->status
                     === 'PENDING'
                 ) {
 
                     $this->changeStatus(
+
                         $trip,
+
                         'ASSIGNED',
+
                         'Asignación inicial de recursos.'
                     );
                 }
             }
         );
 
+
         $response =
             redirect()
+
             ->route(
                 'trips.show',
                 $trip
             )
+
             ->with(
                 'success',
                 'Recursos asignados correctamente.'
             );
 
+
         if (!empty($warnings)) {
 
             $response->with(
+
                 'warning',
+
                 implode(
                     ' ',
-                    $warnings
+                    array_unique(
+                        $warnings
+                    )
                 )
             );
         }
 
+
         return $response;
     }
 
+
     /*
-     |--------------------------------------------------------------------------
-     | CAMBIAR ESTADO
-     |--------------------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | CANCELAR VIAJE
+    |--------------------------------------------------------------------------
+    */
 
     public function updateStatus(
         Request $request,
         Trip $trip
     ): RedirectResponse {
 
+        if (
+            $trip->status
+            === 'COMPLETED'
+        ) {
+
+            return back()
+                ->withErrors([
+
+                    'status' =>
+                    'Un viaje completado no puede cancelarse desde esta pantalla.',
+
+                ]);
+        }
+
+
+        if (
+            $trip->status
+            === 'CANCELLED'
+        ) {
+
+            return back()
+                ->with(
+                    'warning',
+
+                    'El viaje ya se encuentra cancelado.'
+                );
+        }
+
+
         $validated =
             $request->validate([
 
                 'status' => [
                     'required',
-
                     Rule::in([
-                        'PENDING',
-                        'ASSIGNED',
-                        'IN_TRANSIT',
-                        'AT_DESTINATION',
-                        'COMPLETED',
                         'CANCELLED',
                     ]),
                 ],
 
                 'reason' => [
-                    'nullable',
+                    'required',
                     'string',
                     'max:2000',
                 ],
+
+            ], [
+
+                'reason.required' =>
+                'Debe indicar el motivo de la cancelación.',
+
             ]);
 
-        if (
-            $validated['status']
-            === $trip->status
-        ) {
 
-            return back()->with(
-                'warning',
-                'El viaje ya se encuentra en ese estado.'
-            );
-        }
+        DB::transaction(
+            function () use (
+                $trip,
+                $validated
+            ) {
 
-        $this->changeStatus(
-            $trip,
-            $validated['status'],
-            $validated['reason'] ?? null
+                $this->changeStatus(
+
+                    $trip,
+
+                    'CANCELLED',
+
+                    $validated['reason']
+                );
+
+
+                $activeAssignment =
+                    $trip
+                    ->assignments()
+
+                    ->whereNull(
+                        'unassigned_at'
+                    )
+
+                    ->first();
+
+
+                if ($activeAssignment) {
+
+                    $activeAssignment->update([
+
+                        'unassigned_at' =>
+                        now(),
+
+                        'release_reason' =>
+                        $validated['reason'],
+
+                        'released_by' =>
+                        Auth::id(),
+
+                    ]);
+                }
+            }
         );
+
 
         return redirect()
             ->route(
@@ -921,35 +1960,50 @@ class TripController extends Controller
             )
             ->with(
                 'success',
-                'Estado actualizado correctamente.'
+                'Viaje cancelado correctamente.'
             );
     }
 
+
     /*
-     |--------------------------------------------------------------------------
-     | MÉTODOS INTERNOS
-     |--------------------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | CREAR VIAJE DESDE OT
+    |--------------------------------------------------------------------------
+    */
 
     private function createTripFromWorkOrder(
         WorkOrder $workOrder,
+        int $serviceNumber,
+        string $stage,
         string $scheduledStart,
         ?string $scheduledEnd = null,
-        ?string $notes = null,
-        ?int $sequence = null
+        ?string $notes = null
     ): Trip {
 
-        if (!$sequence) {
-
-            $sequence =
-                (
-                    $workOrder
-                    ->trips()
-                    ->max('sequence_number')
-                    ?? 0
+        $sequenceNumber =
+            (
+                $workOrder
+                ->trips()
+                ->max(
+                    'sequence_number'
                 )
-                + 1;
-        }
+                ?? 0
+            ) + 1;
+
+
+        $legacyServiceType =
+            match ($stage) {
+
+                'POSITIONING' =>
+                'POSITIONING',
+
+                'PICKUP' =>
+                'PICKUP',
+
+                default =>
+                'TRANSPORT',
+            };
+
 
         $trip =
             Trip::create([
@@ -958,16 +2012,21 @@ class TripController extends Controller
                 $workOrder->id,
 
                 'trip_number' =>
-                $this->generateTripNumber(),
+                $this
+                    ->generateTripNumber(),
 
                 'sequence_number' =>
-                $sequence,
+                $sequenceNumber,
 
-                /*
-                 * SNAPSHOTS
-                 */
+                'service_number' =>
+                $serviceNumber,
+
+                'service_stage' =>
+                $stage,
+
                 'client_id' =>
-                $workOrder->client_id,
+                $workOrder
+                    ->client_id,
 
                 'client_name_snapshot' =>
                 $workOrder
@@ -975,7 +2034,8 @@ class TripController extends Controller
                     ->business_name,
 
                 'subclient_id' =>
-                $workOrder->subclient_id,
+                $workOrder
+                    ->subclient_id,
 
                 'subclient_name_snapshot' =>
                 $workOrder
@@ -983,7 +2043,8 @@ class TripController extends Controller
                     ?->business_name,
 
                 'cargo_type_id' =>
-                $workOrder->cargo_type_id,
+                $workOrder
+                    ->cargo_type_id,
 
                 'cargo_type_name_snapshot' =>
                 $workOrder
@@ -1003,12 +2064,8 @@ class TripController extends Controller
                     ->operation_type,
 
                 'service_type' =>
-                $workOrder
-                    ->service_type,
+                $legacyServiceType,
 
-                /*
-                 * ORIGEN
-                 */
                 'origin_type' =>
                 $workOrder
                     ->origin_type,
@@ -1025,9 +2082,6 @@ class TripController extends Controller
                 $workOrder
                     ->origin_name,
 
-                /*
-                 * DESTINO
-                 */
                 'destination_type' =>
                 $workOrder
                     ->destination_type,
@@ -1063,7 +2117,9 @@ class TripController extends Controller
                 Auth::id(),
             ]);
 
+
         TripStatusHistory::create([
+
             'trip_id' =>
             $trip->id,
 
@@ -1074,7 +2130,7 @@ class TripController extends Controller
             'PENDING',
 
             'reason' =>
-            'Creación del viaje.',
+            'Viaje generado desde la Orden de Trabajo.',
 
             'changed_by' =>
             Auth::id(),
@@ -1083,29 +2139,191 @@ class TripController extends Controller
             now(),
         ]);
 
+
         return $trip;
     }
 
-    private function generateTripNumber(): string
-    {
-        $year =
-            now()->format('Y');
 
-        $lastId =
-            Trip::withTrashed()
-            ->max('id')
-            ?? 0;
+    /*
+    |--------------------------------------------------------------------------
+    | ETAPAS SEGÚN MODALIDAD
+    |--------------------------------------------------------------------------
+    */
 
-        return 'VIA-'
-            . $year
-            . '-'
-            . str_pad(
-                $lastId + 1,
-                6,
-                '0',
-                STR_PAD_LEFT
-            );
+    private function stagesForModality(
+        string $modality
+    ): array {
+
+        return match ($modality) {
+
+            'POSITIONING' => [
+                'POSITIONING',
+            ],
+
+            'PICKUP' => [
+                'PICKUP',
+            ],
+
+            'POSITIONING_PICKUP' => [
+                'POSITIONING',
+                'PICKUP',
+            ],
+
+            default => [
+                'IMMEDIATE',
+            ],
+        };
     }
+
+
+    private function defaultStage(
+        string $modality
+    ): string {
+
+        return match ($modality) {
+
+            'POSITIONING' =>
+            'POSITIONING',
+
+            'PICKUP' =>
+            'PICKUP',
+
+            default =>
+            'IMMEDIATE',
+        };
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | DEPENDENCIA POSICIÓN → RETIRO
+    |--------------------------------------------------------------------------
+    */
+
+    private function findPositioningStage(
+        Trip $trip
+    ): ?Trip {
+
+        if (
+            $trip->service_stage
+            !== 'PICKUP'
+
+            ||
+            !$trip->service_number
+        ) {
+
+            return null;
+        }
+
+
+        return Trip::query()
+
+            ->where(
+                'work_order_id',
+                $trip->work_order_id
+            )
+
+            ->where(
+                'service_number',
+                $trip->service_number
+            )
+
+            ->where(
+                'service_stage',
+                'POSITIONING'
+            )
+
+            ->first();
+    }
+
+
+    private function isStageUnlocked(
+        Trip $trip
+    ): bool {
+
+        /*
+         * Solo RETIRO depende
+         * de otra etapa.
+         */
+        if (
+            $trip->service_stage
+            !== 'PICKUP'
+        ) {
+
+            return true;
+        }
+
+
+        /*
+         * Si la modalidad de la OT
+         * es solamente RETIRO,
+         * no debe bloquearse.
+         */
+        if (
+            $trip
+            ->workOrder
+            ?->service_modality
+            !== 'POSITIONING_PICKUP'
+        ) {
+
+            return true;
+        }
+
+
+        $positioning =
+            $this
+            ->findPositioningStage(
+                $trip
+            );
+
+
+        if (!$positioning) {
+
+            return false;
+        }
+
+
+        return $positioning->status
+            === 'COMPLETED';
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | PROGRAMACIÓN
+    |--------------------------------------------------------------------------
+    */
+
+    private function buildScheduledStart(
+        WorkOrder $workOrder
+    ): string {
+
+        $date =
+            $workOrder
+            ->requested_date
+            ->format(
+                'Y-m-d'
+            );
+
+
+        $time =
+            $workOrder
+            ->requested_time
+
+            ?: '00:00';
+
+
+        return $date
+            . ' '
+            . $time;
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ESTADO
+    |--------------------------------------------------------------------------
+    */
 
     private function changeStatus(
         Trip $trip,
@@ -1116,15 +2334,20 @@ class TripController extends Controller
         $oldStatus =
             $trip->status;
 
+
         $trip->update([
+
             'status' =>
             $newStatus,
 
             'updated_by' =>
             Auth::id(),
+
         ]);
 
+
         TripStatusHistory::create([
+
             'trip_id' =>
             $trip->id,
 
@@ -1142,8 +2365,16 @@ class TripController extends Controller
 
             'changed_at' =>
             now(),
+
         ]);
     }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | RESTRICCIONES CONDUCTOR
+    |--------------------------------------------------------------------------
+    */
 
     private function checkDriverRestrictions(
         Trip $trip,
@@ -1151,25 +2382,63 @@ class TripController extends Controller
     ): array {
 
         $date =
-            $trip
+            $trip->scheduled_start_at
+
+            ? $trip
             ->scheduled_start_at
+            ->toDateString()
+
+            : now()
             ->toDateString();
+
+
+        $plantIds =
+            array_values(
+                array_filter([
+
+                    $trip
+                        ->origin_plant_id,
+
+                    $trip
+                        ->destination_plant_id,
+
+                ])
+            );
+
+
+        $locationIds =
+            array_values(
+                array_filter([
+
+                    $trip
+                        ->origin_location_id,
+
+                    $trip
+                        ->destination_location_id,
+
+                ])
+            );
+
 
         $restrictions =
             DriverRestriction::query()
+
             ->where(
                 'driver_id',
                 $driver->id
             )
+
             ->where(
                 'is_active',
                 true
             )
+
             ->whereDate(
                 'start_date',
                 '<=',
                 $date
             )
+
             ->where(
                 function ($query) use ($date) {
 
@@ -1177,6 +2446,7 @@ class TripController extends Controller
                         ->whereNull(
                             'end_date'
                         )
+
                         ->orWhereDate(
                             'end_date',
                             '>=',
@@ -1184,96 +2454,103 @@ class TripController extends Controller
                         );
                 }
             )
+
             ->where(
                 function ($query) use ($trip) {
 
-                    /*
-                         * Restricción general:
-                         * ninguno de los campos
-                         * de alcance está definido.
-                         */
                     $query
-                        ->where(
-                            function ($general) {
-
-                                $general
-                                    ->whereNull(
-                                        'client_id'
-                                    )
-                                    ->whereNull(
-                                        'subclient_id'
-                                    )
-                                    ->whereNull(
-                                        'plant_id'
-                                    )
-                                    ->whereNull(
-                                        'location_id'
-                                    );
-                            }
+                        ->whereNull(
+                            'client_id'
                         )
 
                         ->orWhere(
                             'client_id',
                             $trip->client_id
                         );
+                }
+            )
 
-                    if ($trip->subclient_id) {
+            ->where(
+                function ($query) use ($trip) {
 
-                        $query->orWhere(
+                    $query
+                        ->whereNull(
+                            'subclient_id'
+                        )
+
+                        ->orWhere(
                             'subclient_id',
                             $trip->subclient_id
                         );
-                    }
+                }
+            )
 
-                    if ($trip->origin_plant_id) {
+            ->where(
+                function ($query) use ($trip) {
 
-                        $query->orWhere(
-                            'plant_id',
-                            $trip->origin_plant_id
+                    $query
+                        ->whereNull(
+                            'operation_type'
+                        )
+
+                        ->orWhere(
+                            'operation_type',
+                            $trip->operation_type
                         );
-                    }
+                }
+            )
+
+            ->where(
+                function ($query) use ($plantIds) {
+
+                    $query
+                        ->whereNull(
+                            'plant_id'
+                        );
+
 
                     if (
-                        $trip
-                        ->destination_plant_id
+                        !empty($plantIds)
                     ) {
 
-                        $query->orWhere(
-                            'plant_id',
-                            $trip
-                                ->destination_plant_id
-                        );
-                    }
-
-                    if (
-                        $trip
-                        ->origin_location_id
-                    ) {
-
-                        $query->orWhere(
-                            'location_id',
-                            $trip
-                                ->origin_location_id
-                        );
-                    }
-
-                    if (
-                        $trip
-                        ->destination_location_id
-                    ) {
-
-                        $query->orWhere(
-                            'location_id',
-                            $trip
-                                ->destination_location_id
-                        );
+                        $query
+                            ->orWhereIn(
+                                'plant_id',
+                                $plantIds
+                            );
                     }
                 }
             )
+
+            ->where(
+                function ($query) use ($locationIds) {
+
+                    $query
+                        ->whereNull(
+                            'location_id'
+                        );
+
+
+                    if (
+                        !empty($locationIds)
+                    ) {
+
+                        $query
+                            ->orWhereIn(
+                                'location_id',
+                                $locationIds
+                            );
+                    }
+                }
+            )
+
             ->get();
 
+
         $blocks = [];
+
         $warnings = [];
+
 
         foreach (
             $restrictions
@@ -1281,11 +2558,16 @@ class TripController extends Controller
         ) {
 
             $message =
+
                 'Restricción del conductor: '
-                . $restriction->reason;
+
+                . $restriction
+                ->reason;
+
 
             if (
-                $restriction->action_type
+                $restriction
+                ->action_type
                 === 'BLOCK'
             ) {
 
@@ -1298,9 +2580,49 @@ class TripController extends Controller
             }
         }
 
+
         return [
-            'blocks' => $blocks,
-            'warnings' => $warnings,
+
+            'blocks' =>
+            $blocks,
+
+            'warnings' =>
+            $warnings,
         ];
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | NUMERACIÓN
+    |--------------------------------------------------------------------------
+    */
+
+    private function generateTripNumber(): string
+    {
+        $year =
+            now()
+            ->format('Y');
+
+
+        $lastId =
+            Trip::withTrashed()
+            ->max('id')
+
+            ?? 0;
+
+
+        return 'VIA-'
+
+            . $year
+
+            . '-'
+
+            . str_pad(
+                $lastId + 1,
+                6,
+                '0',
+                STR_PAD_LEFT
+            );
     }
 }

@@ -12,6 +12,7 @@ class WorkOrder extends Model
     use SoftDeletes;
 
     protected $fillable = [
+
         'work_order_number',
 
         'client_id',
@@ -20,9 +21,25 @@ class WorkOrder extends Model
 
         'booking_number',
         'customer_order_number',
+        'customer_reference',
 
         'operation_type',
+
+        /*
+         * Campo anterior.
+         * Se mantiene temporalmente
+         * por compatibilidad.
+         */
         'service_type',
+
+        /*
+         * Nueva clasificación correcta:
+         * IMMEDIATE
+         * POSITIONING
+         * PICKUP
+         * POSITIONING_PICKUP
+         */
+        'service_modality',
 
         'plant_id',
 
@@ -40,6 +57,19 @@ class WorkOrder extends Model
 
         'requested_trips',
 
+        /*
+         * STAND-BY APLICADO
+         */
+        'standby_process_type',
+        'standby_free_hours',
+        'standby_count_start_type',
+        'standby_fraction_minutes',
+        'standby_rule_source',
+
+        'standby_rule_overridden',
+        'standby_override_reason',
+        'standby_override_by',
+
         'requested_container_type',
         'requested_container_size',
 
@@ -47,8 +77,6 @@ class WorkOrder extends Model
         'estimated_weight_kg',
 
         'status',
-
-        'customer_reference',
         'notes',
 
         'created_by',
@@ -58,6 +86,7 @@ class WorkOrder extends Model
     protected function casts(): array
     {
         return [
+
             'requested_date' => 'date',
 
             'appointment_at' => 'datetime',
@@ -65,33 +94,47 @@ class WorkOrder extends Model
             'requested_trips' => 'integer',
 
             'estimated_weight_kg' => 'decimal:2',
+
+            'standby_free_hours' => 'integer',
+
+            'standby_fraction_minutes' => 'integer',
+
+            'standby_rule_overridden' => 'boolean',
         ];
     }
 
     /*
-     |--------------------------------------------------------------------------
-     | RELACIONES
-     |--------------------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | RELACIONES
+    |--------------------------------------------------------------------------
+    */
 
     public function client()
     {
-        return $this->belongsTo(Client::class);
+        return $this->belongsTo(
+            Client::class
+        );
     }
 
     public function subclient()
     {
-        return $this->belongsTo(Subclient::class);
+        return $this->belongsTo(
+            Subclient::class
+        );
     }
 
     public function cargoType()
     {
-        return $this->belongsTo(CargoType::class);
+        return $this->belongsTo(
+            CargoType::class
+        );
     }
 
     public function plant()
     {
-        return $this->belongsTo(Plant::class);
+        return $this->belongsTo(
+            Plant::class
+        );
     }
 
     public function originLocation()
@@ -142,80 +185,156 @@ class WorkOrder extends Model
         );
     }
 
-    /*
-     |--------------------------------------------------------------------------
-     | ETIQUETAS
-     |--------------------------------------------------------------------------
-     */
-
-    public function getOperationTypeLabelAttribute(): string
+    public function standbyOverrideUser()
     {
-        return match ($this->operation_type) {
-            'EXPORT' => 'Exportación',
-            'IMPORT' => 'Importación',
-            'TRANSFER' => 'Transferencia',
-            default => 'Otro',
-        };
-    }
-
-    public function getServiceTypeLabelAttribute(): string
-    {
-        return match ($this->service_type) {
-            'TRANSPORT' => 'Transporte',
-            'POSITIONING' => 'Posicionamiento',
-            'PICKUP' => 'Retiro',
-            'POSITIONING_PICKUP' => 'Posición y retiro',
-            'TRANSFER' => 'Transferencia',
-            default => 'Otro',
-        };
-    }
-
-    public function getStatusLabelAttribute(): string
-    {
-        return match ($this->status) {
-            'PENDING' => 'Pendiente',
-            'PLANNED' => 'Planificada',
-            'IN_PROGRESS' => 'En ejecución',
-            'COMPLETED' => 'Completada',
-            'CANCELLED' => 'Cancelada',
-            default => $this->status,
-        };
-    }
-
-    public function getOriginNameAttribute(): string
-    {
-        if ($this->origin_type === 'PLANT') {
-            return $this->originPlant?->name
-                ?? 'Sin origen';
-        }
-
-        if ($this->origin_type === 'LOCATION') {
-            return $this->originLocation?->name
-                ?? 'Sin origen';
-        }
-
-        return 'Sin origen';
-    }
-
-    public function getDestinationNameAttribute(): string
-    {
-        if ($this->destination_type === 'PLANT') {
-            return $this->destinationPlant?->name
-                ?? 'Sin destino';
-        }
-
-        if ($this->destination_type === 'LOCATION') {
-            return $this->destinationLocation?->name
-                ?? 'Sin destino';
-        }
-
-        return 'Sin destino';
+        return $this->belongsTo(
+            User::class,
+            'standby_override_by'
+        );
     }
 
     public function trips()
     {
         return $this->hasMany(
             Trip::class
-        )->orderBy('sequence_number');
+        )
+            ->orderBy(
+                'sequence_number'
+            );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | ETIQUETAS
+    |--------------------------------------------------------------------------
+    */
+
+    public function getOperationTypeLabelAttribute(): string
+    {
+        return match ($this->operation_type) {
+
+            'EXPORT' =>
+            'Exportación',
+
+            'IMPORT' =>
+            'Importación',
+
+            'TRANSFER' =>
+            'Transferencia',
+
+            default =>
+            'Otra',
+        };
+    }
+
+    public function getServiceModalityLabelAttribute(): string
+    {
+        return match ($this->service_modality) {
+
+            'IMMEDIATE' =>
+            'Inmediata',
+
+            'POSITIONING' =>
+            'Posición',
+
+            'PICKUP' =>
+            'Retiro',
+
+            'POSITIONING_PICKUP' =>
+            'Posición + Retiro',
+
+            default =>
+            'No definida',
+        };
+    }
+
+    public function getStandbyProcessTypeLabelAttribute(): string
+    {
+        return match ($this->standby_process_type) {
+
+            'LOAD' =>
+            'Carga',
+
+            'UNLOAD' =>
+            'Descarga',
+
+            'TRANSFER' =>
+            'Transferencia',
+
+            'OTHER' =>
+            'Otro',
+
+            default =>
+            'No definido',
+        };
+    }
+
+    public function getStandbyCountStartTypeLabelAttribute(): string
+    {
+        return match ($this->standby_count_start_type) {
+
+            'ARRIVAL_TIME' =>
+            'Hora real de llegada',
+
+            'REQUESTED_TIME' =>
+            'Hora solicitada',
+
+            default =>
+            'No definido',
+        };
+    }
+
+    public function getStandbyRuleSourceLabelAttribute(): string
+    {
+        return match ($this->standby_rule_source) {
+
+            'CLIENT' =>
+            'Cliente',
+
+            'SUBCLIENT' =>
+            'Subcliente',
+
+            'OVERRIDE' =>
+            'Excepción manual',
+
+            default =>
+            'No definido',
+        };
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | ORIGEN / DESTINO
+    |--------------------------------------------------------------------------
+    */
+
+    public function getOriginNameAttribute(): string
+    {
+        if (
+            $this->origin_type
+            === 'PLANT'
+        ) {
+
+            return $this->originPlant?->name
+                ?? 'Planta no definida';
+        }
+
+        return $this->originLocation?->name
+            ?? 'Ubicación no definida';
+    }
+
+    public function getDestinationNameAttribute(): string
+    {
+        if (
+            $this->destination_type
+            === 'PLANT'
+        ) {
+
+            return $this->destinationPlant?->name
+                ?? 'Planta no definida';
+        }
+
+        return $this->destinationLocation?->name
+            ?? 'Ubicación no definida';
     }
 }

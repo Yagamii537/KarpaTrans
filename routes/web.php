@@ -16,6 +16,7 @@ use App\Http\Controllers\ContainerController;
 use App\Http\Controllers\WorkOrderController;
 use App\Http\Controllers\TripController;
 use App\Http\Controllers\TripTimeController;
+use App\Http\Controllers\StandbyController;
 
 Route::middleware('guest')->group(function () {
     Route::get('/', function () {
@@ -44,6 +45,11 @@ Route::middleware('auth')->group(function () {
         'subclients',
         SubclientController::class
     );
+
+    Route::get(
+        '/cargo-types/available',
+        [CargoTypeController::class, 'available']
+    )->name('cargo-types.available');
 
     Route::resource(
         'cargo-types',
@@ -94,6 +100,11 @@ Route::middleware('auth')->group(function () {
         '/trips/{trip}/times/{tripTime}',
         [TripTimeController::class, 'destroy']
     )->name('trips.times.destroy');
+
+    Route::get(
+        '/standby',
+        [StandbyController::class, 'index']
+    )->name('standby.index');
 
 
 

@@ -12,71 +12,89 @@ class Plant extends Model
     use SoftDeletes;
 
     protected $fillable = [
+
         'client_id',
+
         'name',
         'code',
+
         'city',
         'address',
         'reference',
+
         'contact_name',
         'phone',
         'email',
+
         'latitude',
         'longitude',
-        'free_loading_hours',
-        'free_unloading_hours',
-        'service_time_start',
-        'standby_fraction_minutes',
+
         'notes',
         'is_active',
     ];
 
+
     protected function casts(): array
     {
         return [
-            'latitude' => 'decimal:7',
-            'longitude' => 'decimal:7',
-            'free_loading_hours' => 'integer',
-            'free_unloading_hours' => 'integer',
-            'standby_fraction_minutes' => 'integer',
-            'is_active' => 'boolean',
+
+            'latitude' =>
+            'decimal:7',
+
+            'longitude' =>
+            'decimal:7',
+
+            'is_active' =>
+            'boolean',
         ];
     }
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | RELACIONES
+    |--------------------------------------------------------------------------
+    */
+
     public function client()
     {
-        return $this->belongsTo(Client::class);
+        return $this->belongsTo(
+            Client::class
+        );
     }
 
-    public function getEffectiveFreeLoadingHoursAttribute(): int
+
+    public function workOrders()
     {
-        return $this->free_loading_hours
-            ?? $this->client->free_loading_hours;
+        return $this->hasMany(
+            WorkOrder::class,
+            'plant_id'
+        );
     }
 
-    public function getEffectiveFreeUnloadingHoursAttribute(): int
+
+    public function originWorkOrders()
     {
-        return $this->free_unloading_hours
-            ?? $this->client->free_unloading_hours;
+        return $this->hasMany(
+            WorkOrder::class,
+            'origin_plant_id'
+        );
     }
 
-    public function getEffectiveServiceTimeStartAttribute(): string
+
+    public function destinationWorkOrders()
     {
-        return $this->service_time_start
-            ?? $this->client->service_time_start;
+        return $this->hasMany(
+            WorkOrder::class,
+            'destination_plant_id'
+        );
     }
 
-    public function getEffectiveStandbyFractionMinutesAttribute(): int
-    {
-        return $this->standby_fraction_minutes
-            ?? $this->client->standby_fraction_minutes;
-    }
 
-    public function getEffectiveServiceTimeStartLabelAttribute(): string
+    public function tripTimes()
     {
-        return match ($this->effective_service_time_start) {
-            'arrival_time' => 'Hora de llegada',
-            default => 'Hora solicitada',
-        };
+        return $this->hasMany(
+            TripTime::class
+        );
     }
 }

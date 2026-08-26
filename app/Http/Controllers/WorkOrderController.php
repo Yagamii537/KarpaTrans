@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\CargoType;
 use App\Models\Client;
 use App\Models\Location;
 use App\Models\Plant;
@@ -13,10 +12,17 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class WorkOrderController extends Controller
 {
+    /*
+    |--------------------------------------------------------------------------
+    | LISTADO
+    |--------------------------------------------------------------------------
+    */
+
     public function index(Request $request): View
     {
         $search =
@@ -31,7 +37,10 @@ class WorkOrderController extends Controller
         $operationType =
             $request->get('operation_type');
 
-        $workOrders = WorkOrder::query()
+
+        $workOrders =
+            WorkOrder::query()
+
             ->with([
                 'client',
                 'subclient',
@@ -42,6 +51,7 @@ class WorkOrderController extends Controller
                 'destinationLocation',
                 'destinationPlant',
             ])
+
             ->when(
                 $search !== '',
                 function ($query) use ($search) {
@@ -55,16 +65,25 @@ class WorkOrderController extends Controller
                                     'like',
                                     "%{$search}%"
                                 )
+
                                 ->orWhere(
                                     'booking_number',
                                     'like',
                                     "%{$search}%"
                                 )
+
                                 ->orWhere(
                                     'customer_order_number',
                                     'like',
                                     "%{$search}%"
                                 )
+
+                                ->orWhere(
+                                    'customer_reference',
+                                    'like',
+                                    "%{$search}%"
+                                )
+
                                 ->orWhereHas(
                                     'client',
                                     function ($clientQuery) use ($search) {
@@ -75,11 +94,24 @@ class WorkOrderController extends Controller
                                             "%{$search}%"
                                         );
                                     }
+                                )
+
+                                ->orWhereHas(
+                                    'subclient',
+                                    function ($subclientQuery) use ($search) {
+
+                                        $subclientQuery->where(
+                                            'business_name',
+                                            'like',
+                                            "%{$search}%"
+                                        );
+                                    }
                                 );
                         }
                     );
                 }
             )
+
             ->when(
                 $status,
                 fn($query) =>
@@ -88,6 +120,7 @@ class WorkOrderController extends Controller
                     $status
                 )
             )
+
             ->when(
                 $clientId,
                 fn($query) =>
@@ -96,6 +129,7 @@ class WorkOrderController extends Controller
                     $clientId
                 )
             )
+
             ->when(
                 $operationType,
                 fn($query) =>
@@ -104,15 +138,20 @@ class WorkOrderController extends Controller
                     $operationType
                 )
             )
+
             ->orderByDesc('requested_date')
             ->orderByDesc('id')
+
             ->paginate(15)
             ->withQueryString();
 
-        $clients = Client::query()
+
+        $clients =
+            Client::query()
             ->where('is_active', true)
             ->orderBy('business_name')
             ->get();
+
 
         return view(
             'work-orders.index',
@@ -127,6 +166,13 @@ class WorkOrderController extends Controller
         );
     }
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | CREAR
+    |--------------------------------------------------------------------------
+    */
+
     public function create(): View
     {
         return view(
@@ -135,28 +181,58 @@ class WorkOrderController extends Controller
         );
     }
 
+
     public function store(
         Request $request
     ): RedirectResponse {
 
         $validated =
-            $this->validateWorkOrder($request);
+            $this->validateWorkOrder(
+                $request
+            );
+
 
         $validated =
             $this->normalizeLocations(
                 $validated
             );
 
+
         /*
-         * Validamos que subcliente, carga y planta
-         * realmente pertenezcan/configuren con el cliente.
+         * Cliente / Subcliente / Carga / Plantas.
          */
         $this->validateBusinessRelations(
             $validated
         );
 
+
+        /*
+         * Compatibilidad temporal con
+         * el campo service_type anterior.
+         */
+        $validated['service_type'] =
+            $this->legacyServiceType(
+                $validated['service_modality']
+            );
+
+
+        /*
+         * Resolvemos y congelamos
+         * la regla Stand-by.
+         */
+        $validated =
+            array_merge(
+                $validated,
+                $this->resolveStandbyRule(
+                    $request,
+                    $validated
+                )
+            );
+
+
         $validated['work_order_number'] =
             $this->generateWorkOrderNumber();
+
 
         $validated['created_by'] =
             Auth::id();
@@ -164,9 +240,15 @@ class WorkOrderController extends Controller
         $validated['updated_by'] =
             Auth::id();
 
-        $workOrder = WorkOrder::create(
-            $validated
-        );
+
+        $workOrder =
+            DB::transaction(
+                fn() =>
+                WorkOrder::create(
+                    $validated
+                )
+            );
+
 
         return redirect()
             ->route(
@@ -179,24 +261,51 @@ class WorkOrderController extends Controller
             );
     }
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | MOSTRAR
+    |--------------------------------------------------------------------------
+    */
+
     public function show(
         WorkOrder $workOrder
     ): View {
 
         $workOrder->load([
+
             'client',
+
             'subclient',
+
             'cargoType',
+
             'plant',
+
             'originLocation',
+
             'originPlant',
+
             'destinationLocation',
+
             'destinationPlant',
+
             'creator',
+
             'updater',
+
+            'standbyOverrideUser',
+
             'trips.activeAssignment.driver',
+
             'trips.activeAssignment.vehicle',
+
+            'trips.activeAssignment.chassis',
+
+            'trips.activeAssignment.container',
+
         ]);
+
 
         return view(
             'work-orders.show',
@@ -204,18 +313,27 @@ class WorkOrderController extends Controller
         );
     }
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | EDITAR
+    |--------------------------------------------------------------------------
+    */
+
     public function edit(
         WorkOrder $workOrder
     ): View {
 
         return view(
             'work-orders.edit',
+
             array_merge(
                 $this->formData(),
                 compact('workOrder')
             )
         );
     }
+
 
     public function update(
         Request $request,
@@ -228,21 +346,52 @@ class WorkOrderController extends Controller
                 $workOrder
             );
 
+
         $validated =
             $this->normalizeLocations(
                 $validated
             );
 
+
         $this->validateBusinessRelations(
             $validated
         );
 
+
+        $validated['service_type'] =
+            $this->legacyServiceType(
+                $validated['service_modality']
+            );
+
+
+        /*
+         * Volvemos a congelar la regla.
+         *
+         * Esto ocurre porque la OT todavía
+         * está siendo modificada.
+         *
+         * Más adelante bloquearemos esta
+         * modificación cuando existan
+         * viajes ejecutados.
+         */
+        $validated =
+            array_merge(
+                $validated,
+                $this->resolveStandbyRule(
+                    $request,
+                    $validated
+                )
+            );
+
+
         $validated['updated_by'] =
             Auth::id();
+
 
         $workOrder->update(
             $validated
         );
+
 
         return redirect()
             ->route(
@@ -255,69 +404,125 @@ class WorkOrderController extends Controller
             );
     }
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | ELIMINAR
+    |--------------------------------------------------------------------------
+    */
+
     public function destroy(
         WorkOrder $workOrder
     ): RedirectResponse {
 
-        /*
-         * Más adelante, cuando existan viajes,
-         * aquí bloquearemos la eliminación
-         * si existen viajes relacionados.
-         */
+        if (
+            $workOrder
+            ->trips()
+            ->exists()
+        ) {
+
+            return back()
+                ->withErrors([
+
+                    'delete' =>
+                    'No se puede eliminar la orden porque tiene viajes relacionados.',
+
+                ]);
+        }
+
 
         $workOrder->delete();
 
+
         return redirect()
-            ->route('work-orders.index')
+            ->route(
+                'work-orders.index'
+            )
             ->with(
                 'success',
                 'Orden de trabajo eliminada correctamente.'
             );
     }
 
+
     /*
-     |--------------------------------------------------------------------------
-     | DATOS PARA FORMULARIO
-     |--------------------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | DATOS DEL FORMULARIO
+    |--------------------------------------------------------------------------
+    */
 
     private function formData(): array
     {
         return [
 
-            'clients' => Client::query()
-                ->where('is_active', true)
-                ->orderBy('business_name')
+            'clients' =>
+            Client::query()
+
+                ->where(
+                    'is_active',
+                    true
+                )
+
+                ->orderBy(
+                    'business_name'
+                )
+
                 ->get(),
 
-            'subclients' => Subclient::query()
-                ->where('is_active', true)
-                ->orderBy('business_name')
-                ->get(),
 
-            'cargoTypes' => CargoType::query()
-                ->where('is_active', true)
-                ->orderBy('name')
-                ->get(),
+            'subclients' =>
+            Subclient::query()
 
-            'plants' => Plant::query()
-                ->where('is_active', true)
+                ->where(
+                    'is_active',
+                    true
+                )
+
                 ->with('client')
-                ->orderBy('name')
+
+                ->orderBy(
+                    'business_name'
+                )
+
                 ->get(),
 
-            'locations' => Location::query()
-                ->where('is_active', true)
+
+            'plants' =>
+            Plant::query()
+
+                ->where(
+                    'is_active',
+                    true
+                )
+
+                ->with('client')
+
                 ->orderBy('name')
+
                 ->get(),
+
+
+            'locations' =>
+            Location::query()
+
+                ->where(
+                    'is_active',
+                    true
+                )
+
+                ->orderBy('name')
+
+                ->get(),
+
         ];
     }
 
+
     /*
-     |--------------------------------------------------------------------------
-     | VALIDACIÓN
-     |--------------------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | VALIDACIÓN FORMULARIO
+    |--------------------------------------------------------------------------
+    */
 
     private function validateWorkOrder(
         Request $request,
@@ -326,20 +531,31 @@ class WorkOrderController extends Controller
 
         return $request->validate([
 
+            /*
+             * CLIENTE
+             */
+
             'client_id' => [
                 'required',
                 'exists:clients,id',
             ],
+
 
             'subclient_id' => [
                 'nullable',
                 'exists:subclients,id',
             ],
 
+
             'cargo_type_id' => [
                 'nullable',
                 'exists:cargo_types,id',
             ],
+
+
+            /*
+             * REFERENCIAS
+             */
 
             'booking_number' => [
                 'nullable',
@@ -347,11 +563,24 @@ class WorkOrderController extends Controller
                 'max:100',
             ],
 
+
             'customer_order_number' => [
                 'nullable',
                 'string',
                 'max:100',
             ],
+
+
+            'customer_reference' => [
+                'nullable',
+                'string',
+                'max:150',
+            ],
+
+
+            /*
+             * OPERACIÓN
+             */
 
             'operation_type' => [
                 'required',
@@ -364,23 +593,32 @@ class WorkOrderController extends Controller
                 ]),
             ],
 
-            'service_type' => [
+
+            /*
+             * MODALIDAD
+             */
+
+            'service_modality' => [
                 'required',
 
                 Rule::in([
-                    'TRANSPORT',
+                    'IMMEDIATE',
                     'POSITIONING',
                     'PICKUP',
                     'POSITIONING_PICKUP',
-                    'TRANSFER',
-                    'OTHER',
                 ]),
             ],
+
 
             'plant_id' => [
                 'nullable',
                 'exists:plants,id',
             ],
+
+
+            /*
+             * ORIGEN
+             */
 
             'origin_type' => [
                 'required',
@@ -391,15 +629,24 @@ class WorkOrderController extends Controller
                 ]),
             ],
 
+
             'origin_location_id' => [
                 'nullable',
+                'required_if:origin_type,LOCATION',
                 'exists:locations,id',
             ],
 
+
             'origin_plant_id' => [
                 'nullable',
+                'required_if:origin_type,PLANT',
                 'exists:plants,id',
             ],
+
+
+            /*
+             * DESTINO
+             */
 
             'destination_type' => [
                 'required',
@@ -410,30 +657,42 @@ class WorkOrderController extends Controller
                 ]),
             ],
 
+
             'destination_location_id' => [
                 'nullable',
+                'required_if:destination_type,LOCATION',
                 'exists:locations,id',
             ],
 
+
             'destination_plant_id' => [
                 'nullable',
+                'required_if:destination_type,PLANT',
                 'exists:plants,id',
             ],
+
+
+            /*
+             * PLANIFICACIÓN
+             */
 
             'requested_date' => [
                 'required',
                 'date',
             ],
 
+
             'requested_time' => [
                 'nullable',
                 'date_format:H:i',
             ],
 
+
             'appointment_at' => [
                 'nullable',
                 'date',
             ],
+
 
             'requested_trips' => [
                 'required',
@@ -441,6 +700,68 @@ class WorkOrderController extends Controller
                 'min:1',
                 'max:500',
             ],
+
+
+            /*
+             * STAND-BY
+             */
+
+            'standby_process_type' => [
+                'required',
+
+                Rule::in([
+                    'LOAD',
+                    'UNLOAD',
+                ]),
+            ],
+
+
+            'standby_rule_overridden' => [
+                'nullable',
+                'boolean',
+            ],
+
+
+            'standby_override_free_hours' => [
+                'nullable',
+                'required_if:standby_rule_overridden,1',
+                'integer',
+                'min:0',
+                'max:999',
+            ],
+
+
+            'standby_override_count_start_type' => [
+                'nullable',
+                'required_if:standby_rule_overridden,1',
+
+                Rule::in([
+                    'REQUESTED_TIME',
+                    'ARRIVAL_TIME',
+                ]),
+            ],
+
+
+            'standby_override_fraction_minutes' => [
+                'nullable',
+                'required_if:standby_rule_overridden,1',
+                'integer',
+                'min:1',
+                'max:1440',
+            ],
+
+
+            'standby_override_reason' => [
+                'nullable',
+                'required_if:standby_rule_overridden,1',
+                'string',
+                'max:2000',
+            ],
+
+
+            /*
+             * CONTENEDOR
+             */
 
             'requested_container_type' => [
                 'nullable',
@@ -455,6 +776,7 @@ class WorkOrderController extends Controller
                 ]),
             ],
 
+
             'requested_container_size' => [
                 'nullable',
 
@@ -467,17 +789,20 @@ class WorkOrderController extends Controller
                 ]),
             ],
 
+
             'cargo_description' => [
                 'nullable',
                 'string',
                 'max:3000',
             ],
 
+
             'estimated_weight_kg' => [
                 'nullable',
                 'numeric',
                 'min:0',
             ],
+
 
             'status' => [
                 'required',
@@ -491,11 +816,6 @@ class WorkOrderController extends Controller
                 ]),
             ],
 
-            'customer_reference' => [
-                'nullable',
-                'string',
-                'max:150',
-            ],
 
             'notes' => [
                 'nullable',
@@ -508,29 +828,39 @@ class WorkOrderController extends Controller
             'client_id.required' =>
             'Seleccione el cliente.',
 
-            'operation_type.required' =>
-            'Seleccione el tipo de operación.',
+            'service_modality.required' =>
+            'Seleccione la modalidad del servicio.',
 
-            'origin_type.required' =>
-            'Seleccione el tipo de origen.',
+            'origin_location_id.required_if' =>
+            'Seleccione la ubicación de origen.',
 
-            'destination_type.required' =>
-            'Seleccione el tipo de destino.',
+            'origin_plant_id.required_if' =>
+            'Seleccione la planta de origen.',
+
+            'destination_location_id.required_if' =>
+            'Seleccione la ubicación de destino.',
+
+            'destination_plant_id.required_if' =>
+            'Seleccione la planta de destino.',
 
             'requested_date.required' =>
             'La fecha solicitada es obligatoria.',
 
-            'requested_trips.min' =>
-            'La orden debe solicitar al menos un viaje.',
+            'standby_process_type.required' =>
+            'Seleccione si la regla Stand-by corresponde a carga o descarga.',
+
+            'standby_override_reason.required_if' =>
+            'Debe indicar el motivo de la excepción de Stand-by.',
 
         ]);
     }
 
+
     /*
-     |--------------------------------------------------------------------------
-     | NORMALIZAR ORIGEN / DESTINO
-     |--------------------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | NORMALIZAR UBICACIONES
+    |--------------------------------------------------------------------------
+    */
 
     private function normalizeLocations(
         array $validated
@@ -540,266 +870,564 @@ class WorkOrderController extends Controller
             $validated['origin_type']
             === 'LOCATION'
         ) {
+
             $validated['origin_plant_id'] =
                 null;
         }
+
 
         if (
             $validated['origin_type']
             === 'PLANT'
         ) {
+
             $validated['origin_location_id'] =
                 null;
         }
+
 
         if (
             $validated['destination_type']
             === 'LOCATION'
         ) {
+
             $validated['destination_plant_id'] =
                 null;
         }
+
 
         if (
             $validated['destination_type']
             === 'PLANT'
         ) {
+
             $validated['destination_location_id'] =
                 null;
         }
 
+
         return $validated;
     }
 
+
     /*
-     |--------------------------------------------------------------------------
-     | REGLAS ENTRE CLIENTE / SUBCLIENTE / CARGA / PLANTA
-     |--------------------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | VALIDACIONES DE NEGOCIO
+    |--------------------------------------------------------------------------
+    */
 
     private function validateBusinessRelations(
         array $validated
     ): void {
 
         $clientId =
+            (int)
             $validated['client_id'];
+
 
         /*
          * SUBCLIENTE
          */
 
-        if (!empty($validated['subclient_id'])) {
+        if (
+            !empty($validated['subclient_id'])
+        ) {
 
             $valid =
                 Subclient::query()
+
                 ->where(
                     'id',
                     $validated['subclient_id']
                 )
+
                 ->where(
                     'client_id',
                     $clientId
                 )
+
+                ->where(
+                    'is_active',
+                    true
+                )
+
                 ->exists();
+
 
             if (!$valid) {
 
-                abort(
-                    422,
-                    'El subcliente seleccionado no pertenece al cliente.'
-                );
+                throw ValidationException::withMessages([
+
+                    'subclient_id' =>
+                    'El subcliente seleccionado no pertenece al cliente.',
+
+                ]);
             }
         }
+
 
         /*
          * PLANTA PRINCIPAL
          */
 
-        if (!empty($validated['plant_id'])) {
+        if (
+            !empty($validated['plant_id'])
+        ) {
 
             $valid =
                 Plant::query()
+
                 ->where(
                     'id',
                     $validated['plant_id']
                 )
+
                 ->where(
                     'client_id',
                     $clientId
                 )
+
+                ->where(
+                    'is_active',
+                    true
+                )
+
                 ->exists();
+
 
             if (!$valid) {
 
-                abort(
-                    422,
-                    'La planta seleccionada no pertenece al cliente.'
-                );
+                throw ValidationException::withMessages([
+
+                    'plant_id' =>
+                    'La planta principal no pertenece al cliente.',
+
+                ]);
             }
         }
 
+
         /*
-         * ORIGEN PLANTA
+         * PLANTA ORIGEN
          */
 
         if (
             $validated['origin_type']
             === 'PLANT'
-            &&
-            !empty($validated['origin_plant_id'])
         ) {
 
             $valid =
                 Plant::query()
+
                 ->where(
                     'id',
                     $validated['origin_plant_id']
                 )
+
                 ->where(
                     'client_id',
                     $clientId
                 )
+
+                ->where(
+                    'is_active',
+                    true
+                )
+
                 ->exists();
+
 
             if (!$valid) {
 
-                abort(
-                    422,
-                    'La planta de origen no pertenece al cliente.'
-                );
+                throw ValidationException::withMessages([
+
+                    'origin_plant_id' =>
+                    'La planta de origen no pertenece al cliente.',
+
+                ]);
             }
         }
 
+
         /*
-         * DESTINO PLANTA
+         * PLANTA DESTINO
          */
 
         if (
             $validated['destination_type']
             === 'PLANT'
-            &&
-            !empty($validated['destination_plant_id'])
         ) {
 
             $valid =
                 Plant::query()
+
                 ->where(
                     'id',
                     $validated['destination_plant_id']
                 )
+
                 ->where(
                     'client_id',
                     $clientId
                 )
+
+                ->where(
+                    'is_active',
+                    true
+                )
+
                 ->exists();
+
 
             if (!$valid) {
 
-                abort(
-                    422,
-                    'La planta de destino no pertenece al cliente.'
-                );
+                throw ValidationException::withMessages([
+
+                    'destination_plant_id' =>
+                    'La planta de destino no pertenece al cliente.',
+
+                ]);
             }
         }
+
 
         /*
          * TIPO DE CARGA
          */
 
-        if (!empty($validated['cargo_type_id'])) {
+        if (
+            !empty($validated['cargo_type_id'])
+        ) {
 
-            $cargoAllowed =
+            $cargoTypeId =
+                (int)
+                $validated['cargo_type_id'];
+
+
+            $allowedForClient =
                 DB::table(
                     'client_cargo_types'
                 )
+
                 ->where(
                     'client_id',
                     $clientId
                 )
+
                 ->where(
                     'cargo_type_id',
-                    $validated['cargo_type_id']
+                    $cargoTypeId
                 )
+
                 ->exists();
 
-            if (!$cargoAllowed) {
 
-                abort(
-                    422,
-                    'El tipo de carga no está configurado para este cliente.'
-                );
+            if (!$allowedForClient) {
+
+                throw ValidationException::withMessages([
+
+                    'cargo_type_id' =>
+                    'El tipo de carga no está habilitado para este cliente.',
+
+                ]);
             }
 
-            /*
-             * Si el subcliente tiene configuraciones
-             * propias, también debe estar permitido.
-             */
 
-            if (!empty($validated['subclient_id'])) {
+            if (
+                !empty($validated['subclient_id'])
+            ) {
 
-                $hasSpecificConfiguration =
+                $allowedForSubclient =
                     DB::table(
                         'subclient_cargo_types'
                     )
+
                     ->where(
                         'subclient_id',
                         $validated['subclient_id']
                     )
+
+                    ->where(
+                        'cargo_type_id',
+                        $cargoTypeId
+                    )
+
                     ->exists();
 
-                if (
-                    $hasSpecificConfiguration
-                ) {
 
-                    $allowedForSubclient =
-                        DB::table(
-                            'subclient_cargo_types'
-                        )
-                        ->where(
-                            'subclient_id',
-                            $validated['subclient_id']
-                        )
-                        ->where(
-                            'cargo_type_id',
-                            $validated['cargo_type_id']
-                        )
-                        ->exists();
+                if (!$allowedForSubclient) {
 
-                    if (!$allowedForSubclient) {
+                    throw ValidationException::withMessages([
 
-                        abort(
-                            422,
-                            'El tipo de carga no está habilitado para este subcliente.'
-                        );
-                    }
+                        'cargo_type_id' =>
+                        'El tipo de carga no está habilitado para este subcliente.',
+
+                    ]);
                 }
             }
         }
     }
 
+
     /*
-     |--------------------------------------------------------------------------
-     | NUMERACIÓN AUTOMÁTICA
-     |--------------------------------------------------------------------------
-     */
+    |--------------------------------------------------------------------------
+    | RESOLVER REGLA STAND-BY
+    |--------------------------------------------------------------------------
+    */
+
+    private function resolveStandbyRule(
+        Request $request,
+        array $validated
+    ): array {
+
+        $process =
+            $validated['standby_process_type'];
+
+
+        $isOverride =
+            $request->boolean(
+                'standby_rule_overridden'
+            );
+
+
+        /*
+         * EXCEPCIÓN MANUAL
+         */
+
+        if ($isOverride) {
+
+            return [
+
+                'standby_free_hours' =>
+                (int)
+                $request->input(
+                    'standby_override_free_hours'
+                ),
+
+                'standby_count_start_type' =>
+                $request->input(
+                    'standby_override_count_start_type'
+                ),
+
+                'standby_fraction_minutes' =>
+                (int)
+                $request->input(
+                    'standby_override_fraction_minutes'
+                ),
+
+                'standby_rule_source' =>
+                'OVERRIDE',
+
+                'standby_rule_overridden' =>
+                true,
+
+                'standby_override_reason' =>
+                $request->input(
+                    'standby_override_reason'
+                ),
+
+                'standby_override_by' =>
+                Auth::id(),
+            ];
+        }
+
+
+        /*
+         * Primero buscamos configuración
+         * efectiva del subcliente.
+         */
+
+        $subclient =
+            null;
+
+
+        if (
+            !empty($validated['subclient_id'])
+        ) {
+
+            $subclient =
+                Subclient::with('client')
+                ->find(
+                    $validated['subclient_id']
+                );
+        }
+
+
+        if ($subclient) {
+
+            /*
+             * Hereda.
+             */
+
+            if (
+                $subclient
+                ->inherits_operational_rules
+            ) {
+
+                $client =
+                    $subclient->client;
+
+                return $this
+                    ->buildRuleFromEntity(
+                        $client,
+                        $process,
+                        'CLIENT'
+                    );
+            }
+
+
+            /*
+             * Reglas propias.
+             */
+
+            return $this
+                ->buildRuleFromEntity(
+                    $subclient,
+                    $process,
+                    'SUBCLIENT'
+                );
+        }
+
+
+        /*
+         * Sin subcliente:
+         * usar cliente.
+         */
+
+        $client =
+            Client::findOrFail(
+                $validated['client_id']
+            );
+
+
+        return $this
+            ->buildRuleFromEntity(
+                $client,
+                $process,
+                'CLIENT'
+            );
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CREAR SNAPSHOT DESDE CLIENTE / SUBCLIENTE
+    |--------------------------------------------------------------------------
+    */
+
+    private function buildRuleFromEntity(
+        $entity,
+        string $process,
+        string $source
+    ): array {
+
+        $freeHours =
+            $process === 'UNLOAD'
+
+            ? (int) (
+                $entity
+                ->free_unloading_hours
+                ?? 0
+            )
+
+            : (int) (
+                $entity
+                ->free_loading_hours
+                ?? 0
+            );
+
+
+        $countStart =
+            match ($entity->service_time_start) {
+
+                'arrival_time' =>
+                'ARRIVAL_TIME',
+
+                default =>
+                'REQUESTED_TIME',
+            };
+
+
+        return [
+
+            'standby_free_hours' =>
+            $freeHours,
+
+            'standby_count_start_type' =>
+            $countStart,
+
+            'standby_fraction_minutes' =>
+            (int) (
+                $entity
+                ->standby_fraction_minutes
+                ?? 30
+            ),
+
+            'standby_rule_source' =>
+            $source,
+
+            'standby_rule_overridden' =>
+            false,
+
+            'standby_override_reason' =>
+            null,
+
+            'standby_override_by' =>
+            null,
+        ];
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | COMPATIBILIDAD service_type
+    |--------------------------------------------------------------------------
+    */
+
+    private function legacyServiceType(
+        string $modality
+    ): string {
+
+        return match ($modality) {
+
+            'POSITIONING' =>
+            'POSITIONING',
+
+            'PICKUP' =>
+            'PICKUP',
+
+            'POSITIONING_PICKUP' =>
+            'POSITIONING_PICKUP',
+
+            default =>
+            'TRANSPORT',
+        };
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | NUMERACIÓN
+    |--------------------------------------------------------------------------
+    */
 
     private function generateWorkOrderNumber(): string
     {
         $year =
             now()->format('Y');
 
+
         $lastId =
-            WorkOrder::withTrashed()->max('id')
+            WorkOrder::withTrashed()
+            ->max('id')
             ?? 0;
 
-        $next =
-            $lastId + 1;
 
         return 'OT-'
             . $year
             . '-'
             . str_pad(
-                $next,
+                $lastId + 1,
                 6,
                 '0',
                 STR_PAD_LEFT

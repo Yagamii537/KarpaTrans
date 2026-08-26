@@ -11,81 +11,211 @@ use Illuminate\View\View;
 
 class VehicleController extends Controller
 {
-    public function index(Request $request): View
-    {
-        $search = trim((string) $request->get('search'));
-        $status = $request->get('status');
+    /*
+    |--------------------------------------------------------------------------
+    | LISTADO
+    |--------------------------------------------------------------------------
+    */
 
-        $vehicles = Vehicle::query()
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where(function ($subquery) use ($search) {
-                    $subquery
-                        ->where('plate', 'like', "%{$search}%")
-                        ->orWhere('internal_code', 'like', "%{$search}%")
-                        ->orWhere('brand', 'like', "%{$search}%")
-                        ->orWhere('model', 'like', "%{$search}%")
-                        ->orWhere('chassis_number', 'like', "%{$search}%")
-                        ->orWhere('engine_number', 'like', "%{$search}%");
-                });
-            })
+    public function index(
+        Request $request
+    ): View {
+
+        $search =
+            trim(
+                (string)
+                $request->get('search')
+            );
+
+        $status =
+            $request->get('status');
+
+
+        $vehicles =
+            Vehicle::query()
+
+            ->when(
+                $search !== '',
+                function ($query) use ($search) {
+
+                    $query->where(
+                        function ($subquery) use ($search) {
+
+                            $subquery
+                                ->where(
+                                    'plate',
+                                    'like',
+                                    "%{$search}%"
+                                )
+
+                                ->orWhere(
+                                    'internal_code',
+                                    'like',
+                                    "%{$search}%"
+                                )
+
+                                ->orWhere(
+                                    'brand',
+                                    'like',
+                                    "%{$search}%"
+                                )
+
+                                ->orWhere(
+                                    'model',
+                                    'like',
+                                    "%{$search}%"
+                                )
+
+                                ->orWhere(
+                                    'chassis_number',
+                                    'like',
+                                    "%{$search}%"
+                                )
+
+                                ->orWhere(
+                                    'engine_number',
+                                    'like',
+                                    "%{$search}%"
+                                );
+                        }
+                    );
+                }
+            )
+
             ->when(
                 $status,
                 fn($query) =>
-                $query->where('operational_status', $status)
+                $query->where(
+                    'operational_status',
+                    $status
+                )
             )
+
             ->orderBy('plate')
+
             ->paginate(10)
+
             ->withQueryString();
 
-        return view('vehicles.index', compact(
-            'vehicles',
-            'search',
-            'status'
-        ));
+
+        return view(
+            'vehicles.index',
+            compact(
+                'vehicles',
+                'search',
+                'status'
+            )
+        );
     }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | CREAR
+    |--------------------------------------------------------------------------
+    */
 
     public function create(): View
     {
-        return view('vehicles.create');
+        return view(
+            'vehicles.create'
+        );
     }
 
-    public function store(Request $request): RedirectResponse
-    {
-        $validated = $this->validateVehicle($request);
+
+    public function store(
+        Request $request
+    ): RedirectResponse {
+
+        $validated =
+            $this->validateVehicle(
+                $request
+            );
+
 
         $validated['is_active'] =
-            $request->boolean('is_active');
+            $request->boolean(
+                'is_active'
+            );
 
-        $validated = $this->saveFiles(
-            $request,
+
+        /*
+         * Compatibilidad temporal.
+         *
+         * Si max_weight_kg todavía existe
+         * en la BD, guardaremos aquí el
+         * peso bruto.
+         */
+        if (
+            !empty($validated['gross_weight_kg'])
+        ) {
+
+            $validated['max_weight_kg'] =
+                $validated['gross_weight_kg'];
+        }
+
+
+        $validated =
+            $this->saveFiles(
+                $request,
+                $validated
+            );
+
+
+        Vehicle::create(
             $validated
         );
 
-        Vehicle::create($validated);
 
         return redirect()
-            ->route('vehicles.index')
+            ->route(
+                'vehicles.index'
+            )
             ->with(
                 'success',
                 'Vehículo registrado correctamente.'
             );
     }
 
-    public function show(Vehicle $vehicle): View
-    {
+
+    /*
+    |--------------------------------------------------------------------------
+    | DETALLE
+    |--------------------------------------------------------------------------
+    */
+
+    public function show(
+        Vehicle $vehicle
+    ): View {
+
+        $vehicle->load([
+            'assignments.trip',
+        ]);
+
+
         return view(
             'vehicles.show',
             compact('vehicle')
         );
     }
 
-    public function edit(Vehicle $vehicle): View
-    {
+
+    /*
+    |--------------------------------------------------------------------------
+    | EDITAR
+    |--------------------------------------------------------------------------
+    */
+
+    public function edit(
+        Vehicle $vehicle
+    ): View {
+
         return view(
             'vehicles.edit',
             compact('vehicle')
         );
     }
+
 
     public function update(
         Request $request,
@@ -98,48 +228,100 @@ class VehicleController extends Controller
                 $vehicle
             );
 
-        $validated['is_active'] =
-            $request->boolean('is_active');
 
-        $validated = $this->saveFiles(
-            $request,
-            $validated,
-            $vehicle
+        $validated['is_active'] =
+            $request->boolean(
+                'is_active'
+            );
+
+
+        if (
+            !empty($validated['gross_weight_kg'])
+        ) {
+
+            $validated['max_weight_kg'] =
+                $validated['gross_weight_kg'];
+        }
+
+
+        $validated =
+            $this->saveFiles(
+                $request,
+                $validated,
+                $vehicle
+            );
+
+
+        $vehicle->update(
+            $validated
         );
 
-        $vehicle->update($validated);
 
         return redirect()
-            ->route('vehicles.index')
+            ->route(
+                'vehicles.index'
+            )
             ->with(
                 'success',
                 'Vehículo actualizado correctamente.'
             );
     }
 
+
+    /*
+    |--------------------------------------------------------------------------
+    | ELIMINAR
+    |--------------------------------------------------------------------------
+    */
+
     public function destroy(
         Vehicle $vehicle
     ): RedirectResponse {
 
         /*
-         * El vehículo ya no está ligado
-         * permanentemente a ningún chasis.
-         *
-         * Las asignaciones se manejarán
-         * posteriormente desde los viajes.
+         * Si ya tiene historial de
+         * asignaciones no debemos eliminarlo.
          */
+        if (
+            $vehicle
+            ->assignments()
+            ->exists()
+        ) {
 
-        $this->deleteFiles($vehicle);
+            return back()
+                ->withErrors([
+
+                    'delete' =>
+                    'No se puede eliminar el vehículo porque tiene historial de viajes o asignaciones.',
+
+                ]);
+        }
+
+
+        $this->deleteFiles(
+            $vehicle
+        );
+
 
         $vehicle->delete();
 
+
         return redirect()
-            ->route('vehicles.index')
+            ->route(
+                'vehicles.index'
+            )
             ->with(
                 'success',
                 'Vehículo eliminado correctamente.'
             );
     }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDACIÓN
+    |--------------------------------------------------------------------------
+    */
 
     private function validateVehicle(
         Request $request,
@@ -156,8 +338,12 @@ class VehicleController extends Controller
                 Rule::unique(
                     'vehicles',
                     'plate'
-                )->ignore($vehicle?->id),
+                )
+                    ->ignore(
+                        $vehicle?->id
+                    ),
             ],
+
 
             'internal_code' => [
                 'nullable',
@@ -167,8 +353,12 @@ class VehicleController extends Controller
                 Rule::unique(
                     'vehicles',
                     'internal_code'
-                )->ignore($vehicle?->id),
+                )
+                    ->ignore(
+                        $vehicle?->id
+                    ),
             ],
+
 
             'brand' => [
                 'required',
@@ -176,24 +366,30 @@ class VehicleController extends Controller
                 'max:100',
             ],
 
+
             'model' => [
                 'required',
                 'string',
                 'max:100',
             ],
 
+
             'year' => [
                 'nullable',
                 'integer',
                 'min:1950',
-                'max:' . (date('Y') + 1),
+                'max:' . (
+                    date('Y') + 1
+                ),
             ],
+
 
             'color' => [
                 'nullable',
                 'string',
                 'max:50',
             ],
+
 
             'vehicle_type' => [
                 'required',
@@ -206,6 +402,7 @@ class VehicleController extends Controller
                 ]),
             ],
 
+
             'chassis_number' => [
                 'nullable',
                 'string',
@@ -214,8 +411,12 @@ class VehicleController extends Controller
                 Rule::unique(
                     'vehicles',
                     'chassis_number'
-                )->ignore($vehicle?->id),
+                )
+                    ->ignore(
+                        $vehicle?->id
+                    ),
             ],
+
 
             'engine_number' => [
                 'nullable',
@@ -225,8 +426,12 @@ class VehicleController extends Controller
                 Rule::unique(
                     'vehicles',
                     'engine_number'
-                )->ignore($vehicle?->id),
+                )
+                    ->ignore(
+                        $vehicle?->id
+                    ),
             ],
+
 
             'ownership_type' => [
                 'required',
@@ -238,11 +443,13 @@ class VehicleController extends Controller
                 ]),
             ],
 
+
             'owner_name' => [
                 'nullable',
                 'string',
                 'max:255',
             ],
+
 
             'owner_identification' => [
                 'nullable',
@@ -250,11 +457,13 @@ class VehicleController extends Controller
                 'max:20',
             ],
 
+
             'fuel_capacity' => [
                 'nullable',
                 'numeric',
                 'min:0',
             ],
+
 
             'current_odometer' => [
                 'nullable',
@@ -262,8 +471,9 @@ class VehicleController extends Controller
                 'min:0',
             ],
 
+
             /*
-             * PESOS Y MEDIDAS
+             * DATOS TÉCNICOS
              */
 
             'tare_weight_kg' => [
@@ -272,12 +482,21 @@ class VehicleController extends Controller
                 'min:0',
             ],
 
-            'max_weight_kg' => [
+
+            'gross_weight_kg' => [
                 'nullable',
                 'numeric',
                 'min:0',
                 'gte:tare_weight_kg',
             ],
+
+
+            'max_load_capacity_kg' => [
+                'nullable',
+                'numeric',
+                'min:0',
+            ],
+
 
             'length_m' => [
                 'nullable',
@@ -285,11 +504,13 @@ class VehicleController extends Controller
                 'min:0',
             ],
 
+
             'width_m' => [
                 'nullable',
                 'numeric',
                 'min:0',
             ],
+
 
             'height_m' => [
                 'nullable',
@@ -297,8 +518,24 @@ class VehicleController extends Controller
                 'min:0',
             ],
 
+
+            'axles' => [
+                'nullable',
+                'integer',
+                'min:1',
+                'max:20',
+            ],
+
+
+            'volume_m3' => [
+                'nullable',
+                'numeric',
+                'min:0',
+            ],
+
+
             /*
-             * DOCUMENTACIÓN
+             * DOCUMENTOS
              */
 
             'registration_expiration_date' => [
@@ -306,15 +543,18 @@ class VehicleController extends Controller
                 'date',
             ],
 
+
             'technical_review_expiration_date' => [
                 'nullable',
                 'date',
             ],
 
+
             'insurance_expiration_date' => [
                 'nullable',
                 'date',
             ],
+
 
             'operational_status' => [
                 'required',
@@ -327,12 +567,14 @@ class VehicleController extends Controller
                 ]),
             ],
 
+
             'photo' => [
                 'nullable',
                 'image',
                 'mimes:jpg,jpeg,png,webp',
                 'max:4096',
             ],
+
 
             'registration_document' => [
                 'nullable',
@@ -341,6 +583,7 @@ class VehicleController extends Controller
                 'max:5120',
             ],
 
+
             'insurance_document' => [
                 'nullable',
                 'file',
@@ -348,12 +591,14 @@ class VehicleController extends Controller
                 'max:5120',
             ],
 
+
             'technical_review_document' => [
                 'nullable',
                 'file',
                 'mimes:pdf,jpg,jpeg,png',
                 'max:5120',
             ],
+
 
             'notes' => [
                 'nullable',
@@ -375,14 +620,26 @@ class VehicleController extends Controller
             'model.required' =>
             'El modelo es obligatorio.',
 
+            'vehicle_type.required' =>
+            'Seleccione el tipo de vehículo.',
+
+            'ownership_type.required' =>
+            'Seleccione el tipo de propiedad.',
+
+            'gross_weight_kg.gte' =>
+            'El peso bruto no puede ser menor que la tara.',
+
             'operational_status.required' =>
             'Seleccione el estado operativo.',
-
-            'max_weight_kg.gte' =>
-            'El peso máximo no puede ser menor que la tara.',
-
         ]);
     }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | ARCHIVOS
+    |--------------------------------------------------------------------------
+    */
 
     private function saveFiles(
         Request $request,
@@ -403,56 +660,71 @@ class VehicleController extends Controller
 
             'technical_review_document' =>
             'vehicles/reviews',
-
         ];
 
-        foreach ($fields as $field => $folder) {
 
-            if ($request->hasFile($field)) {
+        foreach (
+            $fields
+            as $field => $folder
+        ) {
 
-                if ($vehicle?->{$field}) {
-
-                    Storage::disk('public')
-                        ->delete(
-                            $vehicle->{$field}
-                        );
-                }
-
-                $validated[$field] =
-                    $request
-                    ->file($field)
-                    ->store(
-                        $folder,
-                        'public'
-                    );
+            if (
+                !$request->hasFile(
+                    $field
+                )
+            ) {
+                continue;
             }
+
+
+            if (
+                $vehicle
+                &&
+                $vehicle->{$field}
+            ) {
+
+                Storage::disk(
+                    'public'
+                )->delete(
+                    $vehicle->{$field}
+                );
+            }
+
+
+            $validated[$field] =
+                $request
+                ->file($field)
+                ->store(
+                    $folder,
+                    'public'
+                );
         }
+
 
         return $validated;
     }
+
 
     private function deleteFiles(
         Vehicle $vehicle
     ): void {
 
-        $files = [
-
-            $vehicle->photo,
-
-            $vehicle->registration_document,
-
-            $vehicle->insurance_document,
-
-            $vehicle->technical_review_document,
-
-        ];
-
-        foreach ($files as $file) {
+        foreach (
+            [
+                $vehicle->photo,
+                $vehicle->registration_document,
+                $vehicle->insurance_document,
+                $vehicle->technical_review_document,
+            ] as $file
+        ) {
 
             if ($file) {
 
-                Storage::disk('public')
-                    ->delete($file);
+                Storage::disk(
+                    'public'
+                )->delete(
+                    $file
+                );
             }
         }
     }

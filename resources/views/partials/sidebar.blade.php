@@ -271,14 +271,19 @@
 
                 <li class="sidebar-item">
 
-                    <a class="sidebar-link" href="javascript:void(0)">
+                    <a class="sidebar-link" href="{{ route('standby.index') }}">
 
                         <span>
+
                             <i class="ti ti-clock-hour-4"></i>
+
                         </span>
 
+
                         <span class="hide-menu">
+
                             Stand-by
+
                         </span>
 
                     </a>

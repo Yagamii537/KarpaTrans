@@ -1,5 +1,18 @@
 <div class="row">
 
+    {{-- ========================================================= --}}
+    {{-- INFORMACIÓN GENERAL --}}
+    {{-- ========================================================= --}}
+
+    <div class="col-12">
+
+        <h5 class="fw-semibold mb-3">
+            Información del tipo de carga
+        </h5>
+
+    </div>
+
+
     <div class="col-md-6 mb-3">
 
         <label class="form-label">
@@ -65,7 +78,7 @@
         </label>
 
         <textarea name="description" rows="3" class="form-control @error('description') is-invalid @enderror"
-            placeholder="Descripción del tipo de carga">{{ old('description', $cargoType->description ?? '') }}</textarea>
+            placeholder="Descripción o características de esta carga">{{ old('description', $cargoType->description ?? '') }}</textarea>
 
         @error('description')
             <div class="invalid-feedback">
@@ -76,42 +89,165 @@
     </div>
 
 
+    {{-- ========================================================= --}}
+    {{-- CLIENTES Y SUBCLIENTES --}}
+    {{-- ========================================================= --}}
+
     <div class="col-12">
 
         <hr>
 
         <h5 class="fw-semibold mb-2">
-            Clientes permitidos
+            Clientes y subclientes permitidos
         </h5>
 
-        <p class="text-muted mb-3">
-            Seleccione los clientes que pueden manejar este tipo de carga.
+        <p class="text-muted mb-4">
+
+            Seleccione los clientes que pueden
+            manejar este tipo de carga.
+
+            Después puede limitar su uso
+            a subclientes específicos.
+
         </p>
 
     </div>
 
 
+    @error('clients')
+        <div class="col-12">
+
+            <div class="alert alert-danger">
+                {{ $message }}
+            </div>
+
+        </div>
+    @enderror
+
+
+    @error('subclients')
+        <div class="col-12">
+
+            <div class="alert alert-danger">
+                {{ $message }}
+            </div>
+
+        </div>
+    @enderror
+
+
+    @php
+
+        $selectedClients = collect(old('clients', isset($cargoType) ? $cargoType->clients->pluck('id')->toArray() : []))
+            ->map(fn($id) => (int) $id)
+            ->toArray();
+
+        $selectedSubclients = collect(
+            old('subclients', isset($cargoType) ? $cargoType->subclients->pluck('id')->toArray() : []),
+        )
+            ->map(fn($id) => (int) $id)
+            ->toArray();
+
+    @endphp
+
+
     @forelse ($clients as $client)
-        <div class="col-md-4 mb-3">
 
-            <div class="form-check">
+        <div class="col-12 mb-3">
 
-                <input type="checkbox" name="clients[]" value="{{ $client->id }}" id="client_{{ $client->id }}"
-                    class="form-check-input" @checked(in_array($client->id, old('clients', isset($cargoType) ? $cargoType->clients->pluck('id')->toArray() : [])))>
+            <div class="card border mb-0">
 
-                <label class="form-check-label" for="client_{{ $client->id }}">
+                <div class="card-body">
 
-                    {{ $client->business_name }}
+                    {{-- CLIENTE --}}
+
+                    <div class="form-check">
+
+                        <input type="checkbox" name="clients[]" value="{{ $client->id }}"
+                            id="client_{{ $client->id }}" class="form-check-input cargo-client"
+                            data-client="{{ $client->id }}" @checked(in_array($client->id, $selectedClients))>
+
+                        <label class="form-check-label fw-semibold" for="client_{{ $client->id }}">
+
+                            {{ $client->business_name }}
+
+                        </label>
+
+                    </div>
+
 
                     @if ($client->identification)
-                        <small class="text-muted d-block">
+                        <small class="text-muted ms-4">
 
                             {{ $client->identification }}
 
                         </small>
                     @endif
 
-                </label>
+
+                    {{-- SUBCLIENTES --}}
+
+                    @if ($client->subclients->isNotEmpty())
+                        <div class="ms-4 mt-3">
+
+                            <div class="small fw-semibold text-muted mb-2">
+
+                                Subclientes permitidos
+
+                            </div>
+
+
+                            <div class="row">
+
+                                @foreach ($client->subclients as $subclient)
+                                    <div class="col-md-4 mb-2">
+
+                                        <div class="form-check">
+
+                                            <input type="checkbox" name="subclients[]" value="{{ $subclient->id }}"
+                                                id="subclient_{{ $subclient->id }}"
+                                                class="form-check-input cargo-subclient"
+                                                data-client="{{ $client->id }}" @checked(in_array($subclient->id, $selectedSubclients))>
+
+                                            <label class="form-check-label" for="subclient_{{ $subclient->id }}">
+
+                                                {{ $subclient->business_name }}
+
+                                            </label>
+
+                                        </div>
+
+                                    </div>
+                                @endforeach
+
+                            </div>
+
+
+                            <small class="text-muted">
+
+                                Si no selecciona ningún
+                                subcliente, la carga seguirá
+                                disponible para el cliente principal,
+                                pero no aparecerá cuando una OT
+                                seleccione un subcliente.
+
+                            </small>
+
+                        </div>
+                    @else
+                        <div class="ms-4 mt-2">
+
+                            <small class="text-muted">
+
+                                Este cliente no tiene
+                                subclientes activos.
+
+                            </small>
+
+                        </div>
+                    @endif
+
+                </div>
 
             </div>
 
@@ -130,6 +266,7 @@
             </div>
 
         </div>
+
     @endforelse
 
 </div>
@@ -152,3 +289,114 @@
     </button>
 
 </div>
+
+
+<script>
+    document.addEventListener(
+        'DOMContentLoaded',
+        function() {
+
+            const clients =
+                document.querySelectorAll(
+                    '.cargo-client'
+                );
+
+            const subclients =
+                document.querySelectorAll(
+                    '.cargo-subclient'
+                );
+
+
+            /*
+             * Habilitar subclientes
+             * únicamente cuando el cliente
+             * está seleccionado.
+             */
+
+            function refreshSubclients() {
+                subclients.forEach(
+                    function(subclient) {
+
+                        const clientId =
+                            subclient.dataset.client;
+
+                        const parentClient =
+                            document.querySelector(
+                                '.cargo-client[data-client="' +
+                                clientId +
+                                '"]'
+                            );
+
+
+                        const enabled =
+                            parentClient &&
+                            parentClient.checked;
+
+
+                        subclient.disabled = !enabled;
+
+
+                        if (!enabled) {
+
+                            subclient.checked =
+                                false;
+                        }
+                    }
+                );
+            }
+
+
+            /*
+             * Si seleccionamos un subcliente,
+             * el cliente debe quedar seleccionado.
+             */
+
+            subclients.forEach(
+                function(subclient) {
+
+                    subclient.addEventListener(
+                        'change',
+                        function() {
+
+                            if (!this.checked) {
+                                return;
+                            }
+
+
+                            const parentClient =
+                                document.querySelector(
+                                    '.cargo-client[data-client="' +
+                                    this.dataset.client +
+                                    '"]'
+                                );
+
+
+                            if (parentClient) {
+
+                                parentClient.checked =
+                                    true;
+                            }
+
+
+                            refreshSubclients();
+                        }
+                    );
+                }
+            );
+
+
+            clients.forEach(
+                function(client) {
+
+                    client.addEventListener(
+                        'change',
+                        refreshSubclients
+                    );
+                }
+            );
+
+
+            refreshSubclients();
+        }
+    );
+</script>

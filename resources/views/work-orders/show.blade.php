@@ -4,24 +4,49 @@
 
 @section('content')
 
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    @if (session('success'))
+        <div class="alert alert-success">
+            {{ session('success') }}
+        </div>
+    @endif
+
+
+    @if ($errors->any())
+
+        <div class="alert alert-danger">
+
+            @foreach ($errors->all() as $error)
+                <div>
+                    {{ $error }}
+                </div>
+            @endforeach
+
+        </div>
+
+    @endif
+
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
 
         <div>
 
             <h4 class="fw-semibold mb-1">
-
                 {{ $workOrder->work_order_number }}
-
             </h4>
 
             <p class="text-muted mb-0">
 
-                Booking:
-                {{ $workOrder->booking_number ?: 'No registrado' }}
+                {{ $workOrder->client->business_name }}
+
+                @if ($workOrder->subclient)
+                    ·
+                    {{ $workOrder->subclient->business_name }}
+                @endif
 
             </p>
 
         </div>
+
 
         <div class="d-flex gap-2">
 
@@ -31,6 +56,7 @@
                 Regresar
 
             </a>
+
 
             <a href="{{ route('work-orders.edit', $workOrder) }}" class="btn btn-primary">
 
@@ -43,17 +69,21 @@
 
     </div>
 
+
     <div class="row">
 
         <div class="col-lg-8">
+
+            {{-- INFORMACIÓN --}}
 
             <div class="card">
 
                 <div class="card-body">
 
                     <h5 class="fw-semibold mb-4">
-                        Información de la orden
+                        Requerimiento
                     </h5>
+
 
                     <div class="row">
 
@@ -63,9 +93,12 @@
                                 Cliente
                             </small>
 
-                            {{ $workOrder->client->business_name }}
+                            <strong>
+                                {{ $workOrder->client->business_name }}
+                            </strong>
 
                         </div>
+
 
                         <div class="col-md-4 mb-3">
 
@@ -77,6 +110,7 @@
 
                         </div>
 
+
                         <div class="col-md-4 mb-3">
 
                             <small class="text-muted d-block">
@@ -87,45 +121,99 @@
 
                         </div>
 
+
                         <div class="col-md-4 mb-3">
 
                             <small class="text-muted d-block">
-                                Operación
+                                Booking
                             </small>
 
-                            {{ $workOrder->operation_type_label }}
+                            {{ $workOrder->booking_number ?: '-' }}
 
                         </div>
 
+
                         <div class="col-md-4 mb-3">
 
                             <small class="text-muted d-block">
-                                Servicio
+                                Orden cliente
                             </small>
 
-                            {{ $workOrder->service_type_label }}
+                            {{ $workOrder->customer_order_number ?: '-' }}
 
                         </div>
 
+
                         <div class="col-md-4 mb-3">
 
                             <small class="text-muted d-block">
-                                Planta principal
+                                Referencia
                             </small>
 
-                            {{ $workOrder->plant?->name ?: 'No aplica' }}
+                            {{ $workOrder->customer_reference ?: '-' }}
 
                         </div>
 
                     </div>
 
-                    <hr>
+                </div>
+
+            </div>
+
+
+            {{-- OPERACIÓN --}}
+
+            <div class="card">
+
+                <div class="card-body">
 
                     <h5 class="fw-semibold mb-4">
-                        Ruta
+                        Operación
                     </h5>
 
+
                     <div class="row">
+
+                        <div class="col-md-4 mb-3">
+
+                            <small class="text-muted d-block">
+                                Tipo de operación
+                            </small>
+
+                            <strong>
+                                {{ $workOrder->operation_type_label }}
+                            </strong>
+
+                        </div>
+
+
+                        <div class="col-md-4 mb-3">
+
+                            <small class="text-muted d-block">
+                                Modalidad
+                            </small>
+
+                            <span class="badge bg-primary-subtle text-primary">
+
+                                {{ $workOrder->service_modality_label }}
+
+                            </span>
+
+                        </div>
+
+
+                        <div class="col-md-4 mb-3">
+
+                            <small class="text-muted d-block">
+                                Cantidad solicitada
+                            </small>
+
+                            <strong>
+                                {{ $workOrder->requested_trips }}
+                            </strong>
+
+                        </div>
+
 
                         <div class="col-md-6 mb-3">
 
@@ -133,11 +221,12 @@
                                 Origen
                             </small>
 
-                            <h6>
+                            <strong>
                                 {{ $workOrder->origin_name }}
-                            </h6>
+                            </strong>
 
                         </div>
+
 
                         <div class="col-md-6 mb-3">
 
@@ -145,21 +234,12 @@
                                 Destino
                             </small>
 
-                            <h6>
+                            <strong>
                                 {{ $workOrder->destination_name }}
-                            </h6>
+                            </strong>
 
                         </div>
 
-                    </div>
-
-                    <hr>
-
-                    <h5 class="fw-semibold mb-4">
-                        Planificación
-                    </h5>
-
-                    <div class="row">
 
                         <div class="col-md-4 mb-3">
 
@@ -171,15 +251,17 @@
 
                         </div>
 
+
                         <div class="col-md-4 mb-3">
 
                             <small class="text-muted d-block">
                                 Hora solicitada
                             </small>
 
-                            {{ $workOrder->requested_time ? substr($workOrder->requested_time, 0, 5) : 'No definida' }}
+                            {{ $workOrder->requested_time ?: '-' }}
 
                         </div>
+
 
                         <div class="col-md-4 mb-3">
 
@@ -187,214 +269,271 @@
                                 Turno / cita
                             </small>
 
-                            {{ $workOrder->appointment_at ? $workOrder->appointment_at->format('d/m/Y H:i') : 'No definido' }}
+                            {{ $workOrder->appointment_at ? $workOrder->appointment_at->format('d/m/Y H:i') : '-' }}
 
                         </div>
 
-                        <div class="col-md-4 mb-3">
+                    </div>
 
-                            <small class="text-muted d-block">
-                                Viajes solicitados
-                            </small>
+                </div>
 
-                            <h5>
-                                {{ $workOrder->requested_trips }}
+            </div>
+
+
+            {{-- STAND-BY --}}
+
+            <div class="card">
+
+                <div class="card-body">
+
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+
+                        <div>
+
+                            <h5 class="fw-semibold mb-1">
+                                Regla Stand-by aplicada
                             </h5>
 
-                        </div>
-
-                        <div class="col-md-4 mb-3">
-
-                            <small class="text-muted d-block">
-                                Contenedor
+                            <small class="text-muted">
+                                Esta configuración quedó guardada con la OT.
                             </small>
-
-                            {{ $workOrder->requested_container_size ?: '-' }}
-
-                            {{ $workOrder->requested_container_type ?: '' }}
 
                         </div>
 
-                        <div class="col-md-4 mb-3">
+
+                        @if ($workOrder->standby_rule_overridden)
+                            <span class="badge bg-warning-subtle text-warning">
+                                Excepción
+                            </span>
+                        @endif
+
+                    </div>
+
+
+                    <div class="row">
+
+                        <div class="col-md-3 mb-3">
 
                             <small class="text-muted d-block">
-                                Peso estimado
+                                Proceso
                             </small>
 
-                            {{ $workOrder->estimated_weight_kg
-                                ? number_format((float) $workOrder->estimated_weight_kg, 2) . ' kg'
-                                : 'No definido' }}
+                            <strong>
+                                {{ $workOrder->standby_process_type_label }}
+                            </strong>
+
+                        </div>
+
+
+                        <div class="col-md-3 mb-3">
+
+                            <small class="text-muted d-block">
+                                Horas libres
+                            </small>
+
+                            <strong>
+                                {{ $workOrder->standby_free_hours }}
+                                h
+                            </strong>
+
+                        </div>
+
+
+                        <div class="col-md-3 mb-3">
+
+                            <small class="text-muted d-block">
+                                Inicio conteo
+                            </small>
+
+                            {{ $workOrder->standby_count_start_type_label }}
+
+                        </div>
+
+
+                        <div class="col-md-3 mb-3">
+
+                            <small class="text-muted d-block">
+                                Fracción
+                            </small>
+
+                            <strong>
+                                {{ $workOrder->standby_fraction_minutes }}
+                                min
+                            </strong>
+
+                        </div>
+
+
+                        <div class="col-md-6 mb-3">
+
+                            <small class="text-muted d-block">
+                                Fuente
+                            </small>
+
+                            {{ $workOrder->standby_rule_source_label }}
 
                         </div>
 
                     </div>
 
-                    @if ($workOrder->cargo_description)
+
+                    @if ($workOrder->standby_rule_overridden)
+
                         <hr>
 
-                        <h5 class="fw-semibold mb-3">
-                            Descripción de carga
-                        </h5>
 
-                        <p>
-                            {{ $workOrder->cargo_description }}
-                        </p>
-                    @endif
+                        <div class="alert alert-warning mb-0">
 
-                    @if ($workOrder->notes)
-                        <hr>
+                            <div class="fw-semibold">
+                                Excepción manual
+                            </div>
 
-                        <h5 class="fw-semibold mb-3">
-                            Observaciones
-                        </h5>
+                            <div>
+                                {{ $workOrder->standby_override_reason }}
+                            </div>
 
-                        <p class="mb-0">
-                            {{ $workOrder->notes }}
-                        </p>
+
+                            @if ($workOrder->standbyOverrideUser)
+                                <small class="d-block mt-2">
+
+                                    Registrada por:
+                                    {{ $workOrder->standbyOverrideUser->name }}
+
+                                </small>
+                            @endif
+
+                        </div>
+
                     @endif
 
                 </div>
 
             </div>
 
-        </div>
 
-        <div class="col-lg-4">
-
-            <div class="card">
-
-                <div class="card-body">
-
-                    <h5 class="fw-semibold mb-4">
-                        Estado
-                    </h5>
-
-                    <div class="mb-4">
-
-                        <span class="badge bg-primary-subtle text-primary fs-4">
-
-                            {{ $workOrder->status_label }}
-
-                        </span>
-
-                    </div>
-
-                    <hr>
-
-                    <div class="mb-3">
-
-                        <small class="text-muted d-block">
-                            Orden cliente
-                        </small>
-
-                        {{ $workOrder->customer_order_number ?: 'No registrada' }}
-
-                    </div>
-
-                    <div class="mb-3">
-
-                        <small class="text-muted d-block">
-                            Creada por
-                        </small>
-
-                        {{ $workOrder->creator?->name ?: 'Sistema' }}
-
-                    </div>
-
-                    <div>
-
-                        <small class="text-muted d-block">
-                            Fecha de creación
-                        </small>
-
-                        {{ $workOrder->created_at->format('d/m/Y H:i') }}
-
-                    </div>
-
-                </div>
-
-            </div>
+            {{-- VIAJES / ETAPAS --}}
 
             <div class="card">
 
                 <div class="card-body">
 
-                    <h5 class="fw-semibold mb-3">
-                        Viajes
-                    </h5>
+                    @php
 
-                    <p class="text-muted">
+                        $requiredStages = match ($workOrder->service_modality) {
+                            'POSITIONING_PICKUP' => 2,
 
-                        Esta orden solicita:
+                            default => 1,
+                        };
 
-                    </p>
+                        $expectedTrips = $workOrder->requested_trips * $requiredStages;
 
-                    <h2 class="fw-bold">
+                        $generatedTrips = $workOrder->trips->count();
 
-                        {{ $workOrder->requested_trips }}
+                    @endphp
 
-                    </h2>
 
-                    <p class="text-muted mb-0">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
 
-                        viaje(s)
+                        <div>
 
-                    </p>
+                            <h5 class="fw-semibold mb-1">
+                                Viajes / etapas
+                            </h5>
 
-                    <hr>
 
-                    <div class="card">
+                            <small class="text-muted">
 
-                        <div class="card-body">
+                                Servicios solicitados:
+                                {{ $workOrder->requested_trips }}
 
-                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                ·
 
-                                <div>
+                                Etapas esperadas:
+                                {{ $expectedTrips }}
 
-                                    <h5 class="fw-semibold mb-1">
-                                        Viajes
-                                    </h5>
+                                ·
 
-                                    <small class="text-muted">
+                                Generadas:
+                                {{ $generatedTrips }}
 
-                                        Solicitados:
-                                        {{ $workOrder->requested_trips }}
+                            </small>
 
-                                        · Generados:
-                                        {{ $workOrder->trips->count() }}
+                        </div>
 
-                                    </small>
 
-                                </div>
+                        @if ($generatedTrips < $expectedTrips && !in_array($workOrder->status, ['COMPLETED', 'CANCELLED']))
+                            <form method="POST" action="{{ route('work-orders.generate-trips', $workOrder) }}">
 
-                                @if ($workOrder->trips->count() < $workOrder->requested_trips)
-                                    <form method="POST" action="{{ route('work-orders.generate-trips', $workOrder) }}">
+                                @csrf
 
-                                        @csrf
 
-                                        <button class="btn btn-primary btn-sm">
+                                <button type="submit" class="btn btn-primary">
 
-                                            <i class="ti ti-plus me-1"></i>
-                                            Generar viajes
+                                    <i class="ti ti-plus me-1"></i>
 
-                                        </button>
+                                    Generar viajes / etapas
 
-                                    </form>
-                                @endif
+                                </button>
+
+                            </form>
+                        @endif
+
+                    </div>
+
+
+                    @if ($workOrder->service_modality === 'POSITIONING_PICKUP')
+                        <div class="alert alert-light border">
+
+                            <i class="ti ti-info-circle me-1"></i>
+
+                            Cada servicio solicitado genera dos etapas:
+                            <strong>Posición</strong> y
+                            <strong>Retiro</strong>.
+
+                        </div>
+                    @endif
+
+
+                    @forelse (
+                            $workOrder
+                                ->trips
+                                ->groupBy('service_number')
+                            as $serviceNumber => $serviceTrips
+                        )
+
+                        <div class="border rounded p-3 mb-3">
+
+                            <div class="fw-semibold mb-3">
+
+                                Servicio
+                                #{{ $serviceNumber }}
 
                             </div>
 
-                            @forelse ($workOrder->trips as $trip)
+
+                            @foreach ($serviceTrips as $trip)
                                 <a href="{{ route('trips.show', $trip) }}"
-                                    class="d-flex justify-content-between align-items-center border rounded p-3 mb-2 text-decoration-none">
+                                    class="d-flex flex-wrap justify-content-between align-items-center gap-2 border rounded p-3 mb-2 text-decoration-none">
 
                                     <div>
 
-                                        <div class="fw-semibold">
+                                        <div class="d-flex align-items-center gap-2">
 
-                                            {{ $trip->trip_number }}
+                                            <span class="fw-semibold">
+
+                                                {{ $trip->trip_number }}
+
+                                            </span>
+
+
+                                            <span class="badge {{ $trip->service_stage_badge_class }}">
+
+                                                {{ $trip->service_stage_label }}
+
+                                            </span>
 
                                         </div>
+
 
                                         <small class="text-muted">
 
@@ -404,30 +543,140 @@
 
                                     </div>
 
-                                    <span class="badge bg-primary-subtle text-primary">
 
-                                        {{ $trip->status_label }}
+                                    <div>
 
-                                    </span>
+                                        <span class="badge bg-primary-subtle text-primary">
+
+                                            {{ $trip->status_label }}
+
+                                        </span>
+
+                                    </div>
 
                                 </a>
-
-                            @empty
-
-                                <div class="alert alert-light border mb-0">
-
-                                    Todavía no se han generado viajes.
-
-                                </div>
-                            @endforelse
+                            @endforeach
 
                         </div>
 
-                    </div>
+                    @empty
+
+                        <div class="alert alert-light border mb-0">
+
+                            No se han generado viajes
+                            para esta Orden de Trabajo.
+
+                        </div>
+
+                    @endforelse
 
                 </div>
 
             </div>
+
+        </div>
+
+
+        {{-- LATERAL --}}
+
+        <div class="col-lg-4">
+
+            <div class="card">
+
+                <div class="card-body">
+
+                    <h5 class="fw-semibold mb-4">
+                        Resumen
+                    </h5>
+
+
+                    <div class="mb-3">
+
+                        <small class="text-muted d-block">
+                            Estado
+                        </small>
+
+                        <strong>
+                            {{ $workOrder->status }}
+                        </strong>
+
+                    </div>
+
+
+                    <div class="mb-3">
+
+                        <small class="text-muted d-block">
+                            Planta principal
+                        </small>
+
+                        {{ $workOrder->plant?->name ?: 'No definida' }}
+
+                    </div>
+
+
+                    <div class="mb-3">
+
+                        <small class="text-muted d-block">
+                            Tipo contenedor
+                        </small>
+
+                        {{ $workOrder->requested_container_type ?: '-' }}
+
+                    </div>
+
+
+                    <div class="mb-3">
+
+                        <small class="text-muted d-block">
+                            Tamaño
+                        </small>
+
+                        {{ $workOrder->requested_container_size ?: '-' }}
+
+                    </div>
+
+
+                    <div class="mb-3">
+
+                        <small class="text-muted d-block">
+                            Peso estimado
+                        </small>
+
+                        {{ $workOrder->estimated_weight_kg ? number_format($workOrder->estimated_weight_kg, 2) . ' kg' : '-' }}
+
+                    </div>
+
+
+                    @if ($workOrder->cargo_description)
+                        <hr>
+
+                        <small class="text-muted d-block">
+                            Descripción carga
+                        </small>
+
+                        {{ $workOrder->cargo_description }}
+                    @endif
+
+                </div>
+
+            </div>
+
+
+            @if ($workOrder->notes)
+                <div class="card">
+
+                    <div class="card-body">
+
+                        <h5 class="fw-semibold mb-3">
+                            Observaciones
+                        </h5>
+
+                        {{ $workOrder->notes }}
+
+                    </div>
+
+                </div>
+            @endif
 
         </div>
 
